@@ -1,0 +1,12 @@
+USER           = root
+WORKING_DIR    = /Users/calder/code/PLUTO/Calder/First_Sim_RHD
+SYSTEM_NAME    = Darwin
+NODE_NAME      = calders-MacBook-Pro.local
+RELEASE        = 25.5.0
+ARCH           = arm64
+BYTE_ORDER     = little
+VERSION        = Darwin Kernel Version 25.5.0: Mon Apr 27 20:41:12 PDT 2026; root:xnu-12377.121.6~2/RELEASE_ARM64_T6050
+PLUTO_DIR      = /Users/calder/code/PLUTO
+PLUTO_VERSION  = 2026)"
+C_COMPILER     = gcc
+MPI_C_COMPILER = 

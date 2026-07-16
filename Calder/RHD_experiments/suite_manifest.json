@@ -1,0 +1,124 @@
+{
+  "baseline": {
+    "directory": "/Users/calder/code/PLUTO/Calder/First_Sim_RHD_MPI",
+    "values": {
+      "M_NS": "1.4",
+      "GAMMA": "1.333333333333",
+      "RHO_IN": "1.0e8",
+      "V_IN": "0.07",
+      "V_INF": "0.25"
+    },
+    "description": "Completed 1025-cell control used only for convergence comparison."
+  },
+  "survey_control": {
+    "directory": "/Users/calder/code/PLUTO/Calder/RHD_experiments/resolution_2x",
+    "values": {
+      "M_NS": "1.4",
+      "GAMMA": "1.333333333333",
+      "RHO_IN": "1.0e8",
+      "V_IN": "0.07",
+      "V_INF": "0.25"
+    },
+    "description": "2050-cell control used as the reference for every parameter variant."
+  },
+  "experiments": [
+    {
+      "name": "resolution_2x",
+      "group": "resolution",
+      "varied_quantity": "radial_cells",
+      "value": "2050",
+      "description": "Twice the baseline radial resolution in both X1 grid patches.",
+      "x1_grid": "X1-grid    2    11.00    200    u    12.00    1850    s    10000.0"
+    },
+    {
+      "name": "M_NS_1p2",
+      "group": "parameters",
+      "varied_quantity": "M_NS",
+      "value": "1.2",
+      "description": "Neutron-star mass 1.2 Msun.",
+      "x1_grid": null
+    },
+    {
+      "name": "M_NS_1p8",
+      "group": "parameters",
+      "varied_quantity": "M_NS",
+      "value": "1.8",
+      "description": "Neutron-star mass 1.8 Msun.",
+      "x1_grid": null
+    },
+    {
+      "name": "M_NS_2p0",
+      "group": "parameters",
+      "varied_quantity": "M_NS",
+      "value": "2.0",
+      "description": "Neutron-star mass 2.0 Msun.",
+      "x1_grid": null
+    },
+    {
+      "name": "V_INF_0p15",
+      "group": "parameters",
+      "varied_quantity": "V_INF",
+      "value": "0.15",
+      "description": "Terminal speed 0.15 c.",
+      "x1_grid": null
+    },
+    {
+      "name": "V_INF_0p20",
+      "group": "parameters",
+      "varied_quantity": "V_INF",
+      "value": "0.20",
+      "description": "Terminal speed 0.20 c.",
+      "x1_grid": null
+    },
+    {
+      "name": "V_INF_0p30",
+      "group": "parameters",
+      "varied_quantity": "V_INF",
+      "value": "0.30",
+      "description": "Terminal speed 0.30 c.",
+      "x1_grid": null
+    },
+    {
+      "name": "V_IN_0p03",
+      "group": "parameters",
+      "varied_quantity": "V_IN",
+      "value": "0.03",
+      "description": "Inner-boundary speed 0.03 c.",
+      "x1_grid": null
+    },
+    {
+      "name": "V_IN_0p05",
+      "group": "parameters",
+      "varied_quantity": "V_IN",
+      "value": "0.05",
+      "description": "Inner-boundary speed 0.05 c.",
+      "x1_grid": null
+    },
+    {
+      "name": "V_IN_0p10",
+      "group": "parameters",
+      "varied_quantity": "V_IN",
+      "value": "0.10",
+      "description": "Inner-boundary speed 0.10 c.",
+      "x1_grid": null
+    },
+    {
+      "name": "RHO_IN_1e7",
+      "group": "parameters",
+      "varied_quantity": "RHO_IN",
+      "value": "1.0e7",
+      "description": "Inner density 1e7 g cm^-3.",
+      "x1_grid": null
+    },
+    {
+      "name": "RHO_IN_1e9",
+      "group": "parameters",
+      "varied_quantity": "RHO_IN",
+      "value": "1.0e9",
+      "description": "Inner density 1e9 g cm^-3.",
+      "x1_grid": null
+    }
+  ],
+  "grid": "X1-grid    2    11.00    200    u    12.00    1850    s    10000.0",
+  "execution": "All experiments use the 2050-cell grid and run sequentially; each uses MPI internally."
+}

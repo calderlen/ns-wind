@@ -1,0 +1,27 @@
+{
+  "experiment": {
+    "name": "M_NS_1p2",
+    "group": "parameters",
+    "varied_quantity": "M_NS",
+    "value": "1.2",
+    "description": "Neutron-star mass 1.2 Msun.",
+    "x1_grid": null
+  },
+  "prepared_at": "2026-07-15T22:27:58-04:00",
+  "baseline_directory": "/Users/calder/code/PLUTO/Calder/First_Sim_RHD_MPI",
+  "baseline_values": {
+    "M_NS": "1.4",
+    "GAMMA": "1.333333333333",
+    "RHO_IN": "1.0e8",
+    "V_IN": "0.07",
+    "V_INF": "0.25"
+  },
+  "copied_file_sha256": {
+    "init.c": "050e9203e24ff98378ff5c0ece29531ecba87598f4d3a99fe8e68f796ab269de",
+    "definitions.h": "24fa9da691b5ddc832bc65f34bdcabe7852acf43801ce442a31b2730dd453219",
+    "makefile": "dc93ce0950f0e0e4a994c6bbd338ac0151b8fb1d3b388bf96262cd0dc85e1dc1",
+    "pluto.ini": "1655b768a4d6f443b9a828557899b559fbc3fa59b639748e3047b7bd11e79469",
+    "pluto": "48a962ef447e4f7fc818769785a3c9d45abde90cba456a97ce76e2147e4eaef3"
+  },
+  "updated_at": "2026-07-15T22:38:23-04:00"
+}
