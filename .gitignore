@@ -1,0 +1,55 @@
+# macOS metadata
+.DS_Store
+._*
+
+# Python caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# Compiled C/C++ products
+*.o
+*.obj
+*.d
+*.a
+*.so
+*.dylib
+*.dSYM/
+
+# Generated PLUTO build products in Calder problem directories
+/Calder/**/pluto
+/Calder/**/makefile
+/Calder/**/sysconf.out
+
+# PLUTO simulation snapshots
+/Calder/**/data.*.dbl
+/Calder/**/data.*.flt
+/Calder/**/data.*.vtk
+/Calder/**/data.*.h5
+/Calder/**/data.*.tab
+/Calder/**/data.*.ppm
+/Calder/**/data.*.png
+
+# PLUTO output catalogs and restart state
+/Calder/**/dbl.out
+/Calder/**/flt.out
+/Calder/**/vtk.out
+/Calder/**/dbl.h5.out
+/Calder/**/flt.h5.out
+/Calder/**/tab.out
+/Calder/**/ppm.out
+/Calder/**/png.out
+/Calder/**/grid.out
+/Calder/**/restart.out
+
+# Runtime logs and local execution state
+/Calder/**/pluto.*.log
+/Calder/**/run.log
+/Calder/**/run_status.json
+/Calder/**/run_complete.json
+
+# Bulk generated animations
+/Calder/RHD_experiments/gifs/
