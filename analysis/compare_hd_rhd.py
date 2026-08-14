@@ -10,9 +10,9 @@ from matplotlib.lines import Line2D
 import numpy as np
 
 
-CALDER_DIR = Path(__file__).resolve().parent
-DEFAULT_HD_DIR = CALDER_DIR / "First_Sim"
-DEFAULT_RHD_DIR = CALDER_DIR / "First_Sim_RHD"
+REPO_DIR = Path(__file__).resolve().parents[1]
+DEFAULT_HD_DIR = REPO_DIR / "problems" / "hd"
+DEFAULT_RHD_DIR = REPO_DIR / "problems" / "rhd"
 
 C_CGS = 2.99792458e10
 G_CGS = 6.674e-8
@@ -214,7 +214,7 @@ def plot_hd_rhd_comparison(
     *,
     hd_snapshot: int | None = None,
     rhd_snapshot: int | None = None,
-    output: Path | str = CALDER_DIR / "hd_rhd_comparison.png",
+    output: Path | str = REPO_DIR / "runs" / "hd_rhd_comparison.png",
 ) -> Path:
     """Plot HD/RHD initial and current states on the same six axes.
 

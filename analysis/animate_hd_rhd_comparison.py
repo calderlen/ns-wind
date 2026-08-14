@@ -12,7 +12,7 @@ from matplotlib.lines import Line2D
 import numpy as np
 
 from compare_hd_rhd import (
-    CALDER_DIR,
+    REPO_DIR,
     DEFAULT_HD_DIR,
     DEFAULT_RHD_DIR,
     derive_profiles,
@@ -149,7 +149,7 @@ def animate_hd_rhd_comparison(
     hd_dir: Path | str = DEFAULT_HD_DIR,
     rhd_dir: Path | str = DEFAULT_RHD_DIR,
     *,
-    output: Path | str = CALDER_DIR / "hd_rhd_evolution.gif",
+    output: Path | str = REPO_DIR / "runs" / "hd_rhd_evolution.gif",
     fps: float = 40.0,
     dpi: int = 120,
     preview: bool = False,
@@ -367,7 +367,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--hd-dir", type=Path, default=DEFAULT_HD_DIR)
     parser.add_argument("--rhd-dir", type=Path, default=DEFAULT_RHD_DIR)
-    parser.add_argument("--output", type=Path, default=CALDER_DIR / "hd_rhd_evolution.gif")
+    parser.add_argument("--output", type=Path, default=REPO_DIR / "runs" / "hd_rhd_evolution.gif")
     parser.add_argument("--fps", type=float, default=40.0)
     parser.add_argument("--dpi", type=int, default=120)
     parser.add_argument("--preview", action="store_true")

@@ -11,6 +11,7 @@ from matplotlib.lines import Line2D
 import numpy as np
 
 from plot_profiles import (
+    DEFAULT_RUN_DIR,
     diagnostics,
     read_definitions,
     read_grid,
@@ -18,9 +19,6 @@ from plot_profiles import (
     read_parameters,
     read_snapshot,
 )
-
-
-RUN_DIR = Path(__file__).resolve().parent
 
 
 def padded_log_limits(values: np.ndarray) -> tuple[float, float]:
@@ -31,12 +29,14 @@ def padded_log_limits(values: np.ndarray) -> tuple[float, float]:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
+    parser.add_argument("--run-dir", type=Path, default=DEFAULT_RUN_DIR)
     parser.add_argument("--fps", type=float, default=20.0)
     parser.add_argument("--dpi", type=int, default=120)
     parser.add_argument(
         "--output",
         type=Path,
-        default=RUN_DIR / "wind_evolution_hd.gif",
+        default=None,
+        help="Output GIF (default: <run-dir>/wind_evolution_hd.gif)",
     )
     parser.add_argument(
         "--preview",
@@ -45,17 +45,19 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    units = read_definitions(RUN_DIR / "definitions.h")
-    parameters = read_parameters(RUN_DIR / "pluto.ini")
-    radius_km = read_grid(RUN_DIR / "grid.out")
-    catalog = read_output_catalog(RUN_DIR / "dbl.out")
+    run_dir = args.run_dir.resolve()
+    output = args.output or run_dir / "wind_evolution_hd.gif"
+    units = read_definitions(run_dir / "definitions.h")
+    parameters = read_parameters(run_dir / "pluto.ini")
+    radius_km = read_grid(run_dir / "grid.out")
+    catalog = read_output_catalog(run_dir / "dbl.out")
     snapshot_numbers = sorted(catalog)
     time_unit = units["UNIT_LENGTH"] / units["UNIT_VELOCITY"]
 
     snapshots = []
     profiles = []
     for number in snapshot_numbers:
-        snapshot = read_snapshot(number, radius_km, catalog)
+        snapshot = read_snapshot(run_dir, number, radius_km, catalog)
         snapshots.append(snapshot)
         profiles.append(diagnostics(snapshot, radius_km, parameters, units))
 
@@ -191,7 +193,8 @@ def main() -> None:
 
     if args.preview:
         update(len(snapshot_numbers) - 1)
-        preview_path = RUN_DIR / "wind_layout_preview.png"
+        preview_path = output.parent / "wind_layout_preview.png"
+        preview_path.parent.mkdir(parents=True, exist_ok=True)
         fig.savefig(preview_path, dpi=args.dpi, bbox_inches="tight")
         print(f"Saved {preview_path}")
         return
@@ -204,16 +207,16 @@ def main() -> None:
         blit=False,
         repeat=True,
     )
-    args.output.parent.mkdir(parents=True, exist_ok=True)
+    output.parent.mkdir(parents=True, exist_ok=True)
     animation.save(
-        args.output,
+        output,
         writer=PillowWriter(fps=args.fps),
         dpi=args.dpi,
         progress_callback=lambda frame, total: print(
             f"Rendering frame {frame + 1}/{total}", end="\r", flush=True
         ),
     )
-    print(f"\nSaved {args.output}")
+    print(f"\nSaved {output}")
     print(f"Frames: {len(snapshot_numbers)}")
     print(f"Duration: {len(snapshot_numbers) / args.fps:.2f} s per loop")
 

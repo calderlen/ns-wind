@@ -14,8 +14,7 @@ pluto
 *.dSYM/
 sysconf.out
 
-RHD_experiments/
-runs/
+/runs/
 
 data.*.dbl
 data.*.flt

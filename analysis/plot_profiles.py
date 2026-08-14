@@ -15,7 +15,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-RUN_DIR = Path(__file__).resolve().parent
+REPO_DIR = Path(__file__).resolve().parents[1]
+DEFAULT_RUN_DIR = REPO_DIR / "problems" / "hd"
 G_CGS = 6.674e-8
 M_SUN = 1.988e33
 A_RAD_CGS = 7.5657e-15
@@ -78,6 +79,7 @@ def read_output_catalog(path: Path) -> dict[int, dict[str, object]]:
 
 
 def read_snapshot(
+    run_dir: Path,
     number: int,
     radius: np.ndarray,
     catalog: dict[int, dict[str, object]],
@@ -86,7 +88,7 @@ def read_snapshot(
     metadata = catalog[number]
     variables = metadata["variables"]
     endian = "<" if metadata["endian"] == "little" else ">"
-    raw = np.fromfile(RUN_DIR / f"data.{number:04d}.dbl", dtype=f"{endian}f8")
+    raw = np.fromfile(run_dir / f"data.{number:04d}.dbl", dtype=f"{endian}f8")
     expected_size = len(variables) * radius.size
     if raw.size != expected_size:
         raise ValueError(
@@ -153,6 +155,7 @@ def relative_spread(values: np.ndarray, mask: np.ndarray) -> float:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
+    parser.add_argument("--run-dir", type=Path, default=DEFAULT_RUN_DIR)
     parser.add_argument("--initial", type=int, default=0)
     parser.add_argument(
         "--final",
@@ -161,16 +164,23 @@ def main() -> None:
         help="Final snapshot number (default: last entry in dbl.out)",
     )
     parser.add_argument("--show", action="store_true", help="Open an interactive window")
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=None,
+        help="Output PNG (default: <run-dir>/wind_profiles_hd.png)",
+    )
     args = parser.parse_args()
 
-    units = read_definitions(RUN_DIR / "definitions.h")
-    parameters = read_parameters(RUN_DIR / "pluto.ini")
-    radius_km = read_grid(RUN_DIR / "grid.out")
-    catalog = read_output_catalog(RUN_DIR / "dbl.out")
+    run_dir = args.run_dir.resolve()
+    units = read_definitions(run_dir / "definitions.h")
+    parameters = read_parameters(run_dir / "pluto.ini")
+    radius_km = read_grid(run_dir / "grid.out")
+    catalog = read_output_catalog(run_dir / "dbl.out")
     final_number = max(catalog) if args.final is None else args.final
 
-    initial_snapshot = read_snapshot(args.initial, radius_km, catalog)
-    final_snapshot = read_snapshot(final_number, radius_km, catalog)
+    initial_snapshot = read_snapshot(run_dir, args.initial, radius_km, catalog)
+    final_snapshot = read_snapshot(run_dir, final_number, radius_km, catalog)
     initial = diagnostics(initial_snapshot, radius_km, parameters, units)
     final = diagnostics(final_snapshot, radius_km, parameters, units)
 
@@ -224,7 +234,8 @@ def main() -> None:
         f"final physical time = {final_time_seconds:.4f} s"
     )
     fig.tight_layout()
-    output_path = RUN_DIR / "wind_profiles_hd.png"
+    output_path = args.output or run_dir / "wind_profiles_hd.png"
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output_path, dpi=220, bbox_inches="tight")
 
     # Exclude the prescribed r <= 12 km region and a few edge cells when

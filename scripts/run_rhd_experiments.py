@@ -21,9 +21,9 @@ from datetime import datetime
 from pathlib import Path
 
 
-CALDER_DIR = Path(__file__).resolve().parent
-BASELINE_DIR = CALDER_DIR / "First_Sim_RHD_MPI"
-SUITE_DIR = CALDER_DIR / "RHD_experiments"
+REPO_DIR = Path(__file__).resolve().parents[1]
+BASELINE_DIR = REPO_DIR / "problems" / "rhd_mpi"
+SUITE_DIR = REPO_DIR / "runs" / "rhd_experiments"
 FILES_TO_COPY = ("init.c", "definitions.h", "makefile", "pluto.ini", "pluto")
 HIGH_RES_X1_GRID = (
     "X1-grid    2    11.00    200    u    12.00    1850    s    10000.0"
