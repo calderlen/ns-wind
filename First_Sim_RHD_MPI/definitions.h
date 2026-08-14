@@ -7,7 +7,7 @@
 #define  TIME_STEPPING                  RK2
 #define  NTRACER                        0
 #define  PARTICLES                      NO
-#define  USER_DEF_PARAMETERS            5
+#define  USER_DEF_PARAMETERS            6
 
 /* -- physics dependent declarations -- */
 
