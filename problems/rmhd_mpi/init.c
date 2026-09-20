@@ -93,20 +93,18 @@ void Init (double *v, double x1, double x2, double x3)
 
   //if ((x1 >= R_surf) && (x1 <= R_bullet) && (x2 <= 0.643501)) v[PRS] = P_shock;
 
-  #if PHYSICS == MHD || PHYSICS == RMHD
-  v[BX1] = 0.0;
+  #if PHYSICS == RMHD
+  {
+  double Bstar_code;
+
+  Bstar_code = g_inputParam[B_SURF]/(UNIT_VELOCITY*sqrt(4.0*CONST_PI*UNIT_DENSITY));
+
+  v[BX1] = Bstar_code*pow(R_in/x1, 2.0);
   v[BX2] = 0.0;
-  v[BX3] = 0.0;
-
-  v[AX1] = 0.0;
-  v[AX2] = 0.0;
-  v[AX3] = 0.0;
+  v[BX3] = 0.0;  
+  }
   #endif
-
-
-
 }
-
 /* ********************************************************************* */
 void InitDomain (Data *d, Grid *grid)
 /*! 
@@ -197,7 +195,7 @@ void UserDefBoundary (const Data *d, RBox *box, int side, Grid *grid)
 
 
 
-  double rho_in, R_in;
+  double rho_in, R_in, Bstar_code;
   double cs0, cs02, theta0, p0;
   int i_live;
 
@@ -205,6 +203,13 @@ void UserDefBoundary (const Data *d, RBox *box, int side, Grid *grid)
   rho_in = g_inputParam[RHO_IN]/UNIT_DENSITY;
   R_in = 12.0;
 
+  #if PHYSICS == RMHD
+  Bstar_code =
+    g_inputParam[B_SURF]/
+    (UNIT_VELOCITY*sqrt(4.0*CONST_PI*UNIT_DENSITY));
+  #endif
+  
+  
   cs0 = g_inputParam[CS_REL_0];
   cs02 = cs0*cs0;
 
@@ -238,12 +243,17 @@ void UserDefBoundary (const Data *d, RBox *box, int side, Grid *grid)
         v_base = d->Vc[VX1][k][j][i_live];
 
         d->Vc[RHO][k][j][i] = rho_bc;
-        d->Vc[PRS][k][j][i] =
-            p0*pow(rho_bc/rho_in, g_gamma);
+        d->Vc[PRS][k][j][i] = p0*pow(rho_bc/rho_in, g_gamma);
 
         d->Vc[VX1][k][j][i] = v_base;
         d->Vc[VX2][k][j][i] = 0.0;
         d->Vc[VX3][k][j][i] = 0.0;
+
+        #if PHYSICS == RMHD
+        d->Vc[BX1][k][j][i] = Bstar_code*pow(R_in/x1[i], 2.0);
+        d->Vc[BX2][k][j][i] = 0.0;
+        d->Vc[BX3][k][j][i] = 0.0;
+        #endif
 
         d->flag[k][j][i] |= FLAG_INTERNAL_BOUNDARY;
       }

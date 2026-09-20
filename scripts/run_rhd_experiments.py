@@ -39,7 +39,6 @@ class Experiment:
     description: str
     x1_grid: str | None = None
 
-
 EXPERIMENTS = (
     Experiment(
         "resolution_2x",
@@ -49,25 +48,51 @@ EXPERIMENTS = (
         "Twice the baseline radial resolution in both X1 grid patches.",
         HIGH_RES_X1_GRID,
     ),
-    Experiment("M_NS_1p2", "parameters", "M_NS", "1.2", "Neutron-star mass 1.2 Msun."),
-    Experiment("M_NS_1p8", "parameters", "M_NS", "1.8", "Neutron-star mass 1.8 Msun."),
-    Experiment("M_NS_2p0", "parameters", "M_NS", "2.0", "Neutron-star mass 2.0 Msun."),
-    Experiment("V_INF_0p15", "parameters", "V_INF", "0.15", "Terminal speed 0.15 c."),
-    Experiment("V_INF_0p20", "parameters", "V_INF", "0.20", "Terminal speed 0.20 c."),
-    Experiment("V_INF_0p30", "parameters", "V_INF", "0.30", "Terminal speed 0.30 c."),
-    Experiment("V_IN_0p03", "parameters", "V_IN", "0.03", "Inner-boundary speed 0.03 c."),
-    Experiment("V_IN_0p05", "parameters", "V_IN", "0.05", "Inner-boundary speed 0.05 c."),
-    Experiment("V_IN_0p10", "parameters", "V_IN", "0.10", "Inner-boundary speed 0.10 c."),
-    Experiment("RHO_IN_1e7", "parameters", "RHO_IN", "1.0e7", "Inner density 1e7 g cm^-3."),
-    Experiment("RHO_IN_1e9", "parameters", "RHO_IN", "1.0e9", "Inner density 1e9 g cm^-3."),
+    Experiment(
+        "M_NS_1p2",
+        "parameters",
+        "M_NS",
+        "1.2",
+        "Neutron-star mass 1.2 Msun.",
+    ),
+    Experiment(
+        "M_NS_1p8",
+        "parameters",
+        "M_NS",
+        "1.8",
+        "Neutron-star mass 1.8 Msun.",
+    ),
+    Experiment(
+        "M_NS_2p0",
+        "parameters",
+        "M_NS",
+        "2.0",
+        "Neutron-star mass 2.0 Msun.",
+    ),
+    Experiment(
+        "RHO_IN_1e10",
+        "parameters",
+        "RHO_IN",
+        "1.0e10",
+        "Base density 1e10 g cm^-3.",
+    ),
+    Experiment(
+        "RHO_IN_1e11",
+        "parameters",
+        "RHO_IN",
+        "1.0e11",
+        "Base density 1e11 g cm^-3.",
+    ),
 )
+
 
 BASELINE_VALUES = {
     "M_NS": "1.4",
     "GAMMA": "1.333333333333",
-    "RHO_IN": "1.0e8",
-    "V_IN": "0.07",
-    "V_INF": "0.25",
+    "RHO_IN": "1.0e12",
+    "CS_REL_0": "0.236",
+    "V_INIT": "0.07",
+    "V_INF_INIT": "0.25",
 }
 
 

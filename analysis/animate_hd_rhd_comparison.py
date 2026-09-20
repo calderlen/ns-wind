@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import math
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -11,104 +10,12 @@ from matplotlib.animation import FuncAnimation, PillowWriter
 from matplotlib.lines import Line2D
 import numpy as np
 
-from compare_hd_rhd import (
-    REPO_DIR,
-    DEFAULT_HD_DIR,
-    DEFAULT_RHD_DIR,
-    derive_profiles,
-    padded_linear_limits,
-    padded_log_limits,
-    read_catalog,
-    read_definitions,
-    read_grid,
-    read_parameters,
-    read_snapshot,
+from compare_hd_rhd import DEFAULT_HD_DIR, DEFAULT_RHD_DIR
+from wind_common import (
+    REPO_DIR, derive_profiles, read_definitions, read_parameters,
+    read_grid, read_catalog, read_snapshot,
 )
-
-
-def set_gif_frame_rate(
-    path: Path,
-    fps: float,
-    *,
-    frame_times_ms: list[float] | None = None,
-    slow_until_ms: float | None = None,
-    slow_factor: float = 1.0,
-) -> tuple[int, float]:
-    """Set exact average GIF timing without re-encoding pixels.
-
-    GIF stores delays in centiseconds, so 40 fps (2.5 centiseconds per frame)
-    requires alternating 2- and 3-centisecond delays. An optional initial
-    physical-time interval can be slowed by multiplying its frame delays.
-    This patches only Graphic Control Extension delays and preserves pixels.
-    """
-    if not 0.0 < fps <= 100.0:
-        raise ValueError("GIF fps must be greater than 0 and no more than 100")
-    if slow_factor <= 0.0:
-        raise ValueError("slow_factor must be positive")
-    data = bytearray(path.read_bytes())
-    if bytes(data[:6]) not in {b"GIF87a", b"GIF89a"}:
-        raise ValueError(f"Not a GIF file: {path}")
-
-    # Skip logical screen descriptor and optional global color table.
-    packed = data[10]
-    position = 13
-    if packed & 0x80:
-        position += 3 * (2 ** ((packed & 0x07) + 1))
-
-    delay_offsets: list[int] = []
-
-    def skip_sub_blocks(start: int) -> int:
-        while True:
-            size = data[start]
-            start += 1
-            if size == 0:
-                return start
-            start += size
-
-    while position < len(data):
-        marker = data[position]
-        if marker == 0x3B:  # GIF trailer
-            break
-        if marker == 0x21:  # Extension block
-            label = data[position + 1]
-            if label == 0xF9:  # Graphic Control Extension
-                block_size = data[position + 2]
-                if block_size != 4:
-                    raise ValueError("Unexpected GIF graphic-control block size")
-                delay_offsets.append(position + 4)
-                position += 3 + block_size + 1
-            else:
-                position = skip_sub_blocks(position + 2)
-        elif marker == 0x2C:  # Image descriptor
-            local_packed = data[position + 9]
-            position += 10
-            if local_packed & 0x80:
-                position += 3 * (2 ** ((local_packed & 0x07) + 1))
-            position += 1  # LZW minimum code size
-            position = skip_sub_blocks(position)
-        else:
-            raise ValueError(f"Unexpected GIF block marker 0x{marker:02x}")
-
-    if frame_times_ms is not None and len(frame_times_ms) != len(delay_offsets):
-        raise ValueError("frame_times_ms must contain one time per GIF frame")
-
-    normal_delay_cs = 100.0 / fps
-    target_cumulative = 0.0
-    previous_cumulative = 0
-    for frame_index, offset in enumerate(delay_offsets):
-        slow_this_frame = (
-            frame_times_ms is not None
-            and slow_until_ms is not None
-            and frame_times_ms[frame_index] <= slow_until_ms
-        )
-        target_cumulative += normal_delay_cs * (slow_factor if slow_this_frame else 1.0)
-        cumulative = math.floor(target_cumulative + 0.5)
-        delay_cs = max(1, cumulative - previous_cumulative)
-        previous_cumulative += delay_cs
-        data[offset:offset + 2] = int(delay_cs).to_bytes(2, "little")
-
-    path.write_bytes(data)
-    return len(delay_offsets), previous_cumulative / 100.0
+from plot_helpers import padded_log_limits, padded_linear_limits
 
 
 def load_animation_data(run_dir: Path) -> dict[str, object]:
@@ -150,11 +57,9 @@ def animate_hd_rhd_comparison(
     rhd_dir: Path | str = DEFAULT_RHD_DIR,
     *,
     output: Path | str = REPO_DIR / "runs" / "hd_rhd_evolution.gif",
-    fps: float = 40.0,
+    fps: float = 25.0,
     dpi: int = 120,
     preview: bool = False,
-    slow_until_ms: float | None = 150.0,
-    slow_factor: float = 4.0,
 ) -> Path:
     """Overlay synchronized HD and RHD evolution on the same six axes.
 
@@ -305,10 +210,6 @@ def animate_hd_rhd_comparison(
     axes[2, 1].set_xlabel(r"$r\;[\mathrm{km}]$")
     title = fig.suptitle("")
 
-    animated_lines = [
-        line for pair in current_lines.values() for line in pair
-    ] + [hd_velocity, rhd_velocity, hd_sound, rhd_sound]
-
     def update(frame_index: int):
         hd_profile = hd_profiles[frame_index]
         rhd_profile = rhd_profiles[frame_index]
@@ -321,7 +222,6 @@ def animate_hd_rhd_comparison(
         rhd_sound.set_ydata(rhd_profile["sound_speed_c"])
         time_ms = 0.5 * (hd_times[frame_index] + rhd_times[frame_index])
         title.set_text(rf"$t = {time_ms:.1f}\,\mathrm{{ms}}$")
-        return (*animated_lines, title)
 
     output_path = Path(output).resolve()
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -345,21 +245,10 @@ def animate_hd_rhd_comparison(
             f"Rendering frame {frame + 1}/{total}", end="\r", flush=True
         ),
     )
-    average_times_ms = [
-        0.5 * (hd_time + rhd_time)
-        for hd_time, rhd_time in zip(hd_times, rhd_times)
-    ]
-    timed_frames, actual_duration = set_gif_frame_rate(
-        output_path,
-        fps,
-        frame_times_ms=average_times_ms,
-        slow_until_ms=slow_until_ms,
-        slow_factor=slow_factor,
-    )
     plt.close(fig)
     print(f"\nSaved {output_path}")
-    print(f"Frames: {timed_frames}")
-    print(f"Duration: {actual_duration:.2f} s per loop")
+    print(f"Frames: {len(frame_numbers)}")
+    print(f"Duration: {len(frame_numbers) / fps:.2f} s per loop")
     return output_path
 
 
@@ -368,11 +257,9 @@ def main() -> None:
     parser.add_argument("--hd-dir", type=Path, default=DEFAULT_HD_DIR)
     parser.add_argument("--rhd-dir", type=Path, default=DEFAULT_RHD_DIR)
     parser.add_argument("--output", type=Path, default=REPO_DIR / "runs" / "hd_rhd_evolution.gif")
-    parser.add_argument("--fps", type=float, default=40.0)
+    parser.add_argument("--fps", type=float, default=25.0)
     parser.add_argument("--dpi", type=int, default=120)
     parser.add_argument("--preview", action="store_true")
-    parser.add_argument("--slow-until-ms", type=float, default=150.0)
-    parser.add_argument("--slow-factor", type=float, default=4.0)
     args = parser.parse_args()
     animate_hd_rhd_comparison(
         args.hd_dir,
@@ -381,8 +268,6 @@ def main() -> None:
         fps=args.fps,
         dpi=args.dpi,
         preview=args.preview,
-        slow_until_ms=args.slow_until_ms,
-        slow_factor=args.slow_factor,
     )
 
 

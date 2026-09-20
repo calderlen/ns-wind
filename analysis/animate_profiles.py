@@ -10,21 +10,11 @@ from matplotlib.animation import FuncAnimation, PillowWriter
 from matplotlib.lines import Line2D
 import numpy as np
 
-from plot_profiles import (
-    DEFAULT_RUN_DIR,
-    diagnostics,
-    read_definitions,
-    read_grid,
-    read_output_catalog,
-    read_parameters,
-    read_snapshot,
+from plot_profiles import DEFAULT_RUN_DIR, diagnostics
+from wind_common import (
+    read_definitions, read_grid, read_catalog, read_parameters, read_snapshot,
 )
-
-
-def padded_log_limits(values: np.ndarray) -> tuple[float, float]:
-    """Return positive logarithmic limits with a modest margin."""
-    finite = values[np.isfinite(values) & (values > 0.0)]
-    return float(finite.min() / 1.35), float(finite.max() * 1.35)
+from plot_helpers import padded_log_limits
 
 
 def main() -> None:
@@ -47,10 +37,12 @@ def main() -> None:
 
     run_dir = args.run_dir.resolve()
     output = args.output or run_dir / "wind_evolution_hd.gif"
-    units = read_definitions(run_dir / "definitions.h")
+    physics, units = read_definitions(run_dir / "definitions.h")
+    if physics != "HD":
+        raise ValueError(f"Expected an HD run; found {physics}")
     parameters = read_parameters(run_dir / "pluto.ini")
     radius_km = read_grid(run_dir / "grid.out")
-    catalog = read_output_catalog(run_dir / "dbl.out")
+    catalog = read_catalog(run_dir / "dbl.out")
     snapshot_numbers = sorted(catalog)
     time_unit = units["UNIT_LENGTH"] / units["UNIT_VELOCITY"]
 
@@ -167,16 +159,6 @@ def main() -> None:
         axis.set_xlim(radius_km.min(), radius_km.max())
 
     title = fig.suptitle("")
-    animated_lines = (
-        density_line,
-        velocity_line,
-        sound_line,
-        pressure_line,
-        bernoulli_line,
-        temperature_line,
-        mdot_line,
-    )
-
     def update(frame_index: int):
         snapshot = snapshots[frame_index]
         profile = profiles[frame_index]
@@ -189,7 +171,6 @@ def main() -> None:
         mdot_line.set_ydata(profile["mdot_g_s"])
         physical_time_ms = float(snapshot["time"]) * time_unit * 1.0e3
         title.set_text(rf"$t = {physical_time_ms:.1f}\,\mathrm{{ms}}$")
-        return (*animated_lines, title)
 
     if args.preview:
         update(len(snapshot_numbers) - 1)

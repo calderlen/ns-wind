@@ -13,6 +13,39 @@
 /* ///////////////////////////////////////////////////////////////////// */
 #include "pluto.h"
 
+
+static double StellarOmega(void)
+{
+  double P_sec;
+
+  P_sec = g_inputParam[P_ROT_MS]*1.0e-3;
+
+  if (P_sec <= 0.0){
+    printLog("! P_ROT_MS must be > 0\n");
+    QUIT_PLUTO(1);
+  }
+
+  return 2.0*CONST_PI/P_sec;
+}
+
+
+static double StellarVphi(double r)
+{
+  return StellarOmega()*(r*UNIT_LENGTH)/UNIT_VELOCITY;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
 /* ********************************************************************* */
 void Init (double *v, double x1, double x2, double x3)
 /*! 
@@ -81,32 +114,35 @@ void Init (double *v, double x1, double x2, double x3)
   R_inf = (v_inf_init/v_init-1.0)*R_in;
   //v_esc = pow(2.0*G*M_ns/R_in,0.5);
 
-  v[RHO] = rho_in*pow(R_in/x1,2)*(1.0+R_inf/x1)/(1.0+R_inf/R_in);
-  v[VX1] = v_inf_init/(1.0+R_inf/x1);
+  v[RHO] = rho_in*pow(R_in/x1,2)*(1.0 + R_inf/x1)/(1.0 + R_inf/R_in);
+  v[VX1] = v_inf_init/(1.0 + R_inf/x1);
   v[VX2] = 0.0;
-  v[VX3] = 0.0;
+  
+  if (x1 <= R_in){
+  v[VX3] = StellarVphi(x1);
+  }else{
+    v[VX3] = 0.0;
+  }
+
   #if HAVE_ENERGY
   //v[PRS] = (g_gamma-1.0)/2.0/g_gamma*rho_in*pow(R_in/x1,2)*(1.0+R_inf/x1)/(1.0+R_inf/R_in)*(pow(v_inf,2)*R_inf*(2.0*x1+R_inf)/pow(x1+R_inf,2)+pow(v_esc,2)*R_in/x1);
   v[PRS] = p0*pow(v[RHO]/rho_in, g_gamma);
   #endif
-  v[TRC] = 0.0;
 
   //if ((x1 >= R_surf) && (x1 <= R_bullet) && (x2 <= 0.643501)) v[PRS] = P_shock;
 
-  #if PHYSICS == MHD || PHYSICS == RMHD
-  v[BX1] = 0.0;
+  #if PHYSICS == RMHD
+  {
+  double Bstar_code;
+
+  Bstar_code = g_inputParam[B_SURF]/(UNIT_VELOCITY*sqrt(4.0*CONST_PI*UNIT_DENSITY));
+
+  v[BX1] = Bstar_code*pow(R_in/x1, 2.0);
   v[BX2] = 0.0;
-  v[BX3] = 0.0;
-
-  v[AX1] = 0.0;
-  v[AX2] = 0.0;
-  v[AX3] = 0.0;
+  v[BX3] = 0.0;  
+  }
   #endif
-
-
-
 }
-
 /* ********************************************************************* */
 void InitDomain (Data *d, Grid *grid)
 /*! 
@@ -197,7 +233,7 @@ void UserDefBoundary (const Data *d, RBox *box, int side, Grid *grid)
 
 
 
-  double rho_in, R_in;
+  double rho_in, R_in, Bstar_code;
   double cs0, cs02, theta0, p0;
   int i_live;
 
@@ -205,6 +241,13 @@ void UserDefBoundary (const Data *d, RBox *box, int side, Grid *grid)
   rho_in = g_inputParam[RHO_IN]/UNIT_DENSITY;
   R_in = 12.0;
 
+  #if PHYSICS == RMHD
+  Bstar_code =
+    g_inputParam[B_SURF]/
+    (UNIT_VELOCITY*sqrt(4.0*CONST_PI*UNIT_DENSITY));
+  #endif
+  
+  
   cs0 = g_inputParam[CS_REL_0];
   cs02 = cs0*cs0;
 
@@ -219,49 +262,52 @@ void UserDefBoundary (const Data *d, RBox *box, int side, Grid *grid)
   p0 = rho_in*theta0;
 
   if (side == 0) {
-    i_live = IBEG;
 
-    while (i_live <= IEND && x1[i_live] <= R_in) {
-      i_live++;
-    }
+  i_live = IBEG;
 
-    if (i_live > IEND) {
-      printLog("! Cannot find a live cell outside R_in\n");
-      QUIT_PLUTO(1);
-    }
+  while (i_live <= IEND && x1[i_live] <= R_in) {
+    i_live++;
+  }
 
-    TOT_LOOP(k,j,i) {
-      if (x1[i] <= R_in) {
-        double rho_bc, v_base;
+  if (i_live > IEND) {
+    printLog("! Cannot find a live cell outside R_in\n");
+    QUIT_PLUTO(1);
+  }
 
-        rho_bc = rho_in*pow(R_in/x1[i], 2.0);
-        v_base = d->Vc[VX1][k][j][i_live];
+  TOT_LOOP(k,j,i) {
 
-        d->Vc[RHO][k][j][i] = rho_bc;
-        d->Vc[PRS][k][j][i] =
-            p0*pow(rho_bc/rho_in, g_gamma);
+    if (x1[i] <= R_in) {
 
-        d->Vc[VX1][k][j][i] = v_base;
-        d->Vc[VX2][k][j][i] = 0.0;
-        d->Vc[VX3][k][j][i] = 0.0;
+      double rho_bc, v_base, vphi;
 
-        d->flag[k][j][i] |= FLAG_INTERNAL_BOUNDARY;
+      rho_bc = rho_in*pow(R_in/x1[i], 2.0);
+      v_base = d->Vc[VX1][k][j][i_live];
+      vphi   = StellarVphi(x1[i]);
+
+      if (v_base*v_base + vphi*vphi >= 1.0){
+        printLog("! Superluminal stellar boundary velocity at r = %e\n",
+                 x1[i]);
+        QUIT_PLUTO(1);
       }
+
+      d->Vc[RHO][k][j][i] = rho_bc;
+      d->Vc[PRS][k][j][i] =
+          p0*pow(rho_bc/rho_in, g_gamma);
+
+      d->Vc[VX1][k][j][i] = v_base;
+      d->Vc[VX2][k][j][i] = 0.0;
+      d->Vc[VX3][k][j][i] = vphi;
+
+#if PHYSICS == RMHD
+      d->Vc[BX1][k][j][i] = Bstar_code*pow(R_in/x1[i], 2.0);
+      d->Vc[BX2][k][j][i] = 0.0;
+      d->Vc[BX3][k][j][i] = 0.0;
+#endif
+
+      d->flag[k][j][i] |= FLAG_INTERNAL_BOUNDARY;
     }
   }
-  
-//  if (side == 0) {    /* -- check solution inside domain -- */
- //   TOT_LOOP(k,j,i){
-  //    if (x1[i] <= R_in) {
-   //     d->Vc[RHO][k][j][i] = rho_in*pow(R_in/x1[i],2)*(1.0+R_inf/x1[i])/(1.0+R_inf/R_in);
-    //    d->Vc[VX1][k][j][i] = v_inf/(1.0+R_inf/x1[i]);
-     //   d->Vc[VX2][k][j][i] = 0.0;
-      //  d->Vc[VX3][k][j][i] = 0.0;
-       // d->Vc[PRS][k][j][i] = (g_gamma-1.0)/2.0/g_gamma*rho_in*pow(R_in/x1[i],2)*(1.0+R_inf/x1[i])/(1.0+R_inf/R_in)*(pow(v_inf,2)*R_inf*(2.0*x1[i]+R_inf)/pow(x1[i]+R_inf,2)+pow(v_esc,2)*R_in/x1[i]);
-       // d->flag[k][j][i] |= FLAG_INTERNAL_BOUNDARY;
-     // }
-    //}
-  //}
+}
 
   if (side == X1_BEG){  /* -- X1_BEG boundary -- */
     if (box->vpos == CENTER) {

@@ -3,167 +3,19 @@
 from __future__ import annotations
 
 from pathlib import Path
-import re
 
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
-import numpy as np
 
 
-REPO_DIR = Path(__file__).resolve().parents[1]
+from wind_common import (
+    REPO_DIR, derive_profiles, read_definitions, read_parameters,
+    read_grid, read_catalog, read_snapshot,
+)
+from plot_helpers import padded_log_limits, padded_linear_limits
+
 DEFAULT_HD_DIR = REPO_DIR / "problems" / "hd"
 DEFAULT_RHD_DIR = REPO_DIR / "problems" / "rhd"
-
-C_CGS = 2.99792458e10
-G_CGS = 6.674e-8
-M_SUN = 1.988e33
-A_RAD_CGS = 7.5657e-15
-
-
-def read_definitions(path: Path) -> tuple[str, dict[str, float]]:
-    """Read the physics module and numerical UNIT_* definitions."""
-    physics = ""
-    units: dict[str, float] = {}
-    for line in path.read_text().splitlines():
-        fields = line.split()
-        if len(fields) < 3 or fields[0] != "#define":
-            continue
-        if fields[1] == "PHYSICS":
-            physics = fields[2]
-        elif fields[1].startswith("UNIT_"):
-            try:
-                units[fields[1]] = float(fields[2])
-            except ValueError:
-                pass
-    if physics not in {"HD", "RHD"}:
-        raise ValueError(f"Expected HD or RHD in {path}; found {physics!r}")
-    # RHD uses c=1 internally. PLUTO supplies UNIT_VELOCITY=CONST_c when the
-    # user correctly omits an explicit velocity unit from definitions.h.
-    units.setdefault("UNIT_VELOCITY", C_CGS if physics == "RHD" else np.nan)
-    return physics, units
-
-
-def read_parameters(path: Path) -> dict[str, float]:
-    """Read numerical values from the [Parameters] block in pluto.ini."""
-    values: dict[str, float] = {}
-    in_parameters = False
-    for raw_line in path.read_text().splitlines():
-        line = raw_line.split("#", 1)[0].strip()
-        if not line:
-            continue
-        if line.startswith("["):
-            in_parameters = line.lower() == "[parameters]"
-            continue
-        if in_parameters:
-            name, value, *_ = line.split()
-            values[name] = float(value)
-    return values
-
-
-def read_grid(path: Path) -> np.ndarray:
-    """Return radial cell centers from PLUTO's grid.out."""
-    lines = [
-        line for line in path.read_text().splitlines()
-        if line.strip() and not line.lstrip().startswith("#")
-    ]
-    n1 = int(lines[0])
-    edges = np.array(
-        [[float(value) for value in line.split()[1:3]]
-         for line in lines[1:n1 + 1]]
-    )
-    return edges.mean(axis=1)
-
-
-def read_catalog(path: Path) -> dict[int, dict[str, object]]:
-    """Read the completed-snapshot catalog in dbl.out."""
-    catalog: dict[int, dict[str, object]] = {}
-    for line in path.read_text().splitlines():
-        fields = line.split()
-        if not fields:
-            continue
-        number = int(fields[0])
-        catalog[number] = {
-            "time": float(fields[1]),
-            "endian": fields[5],
-            "variables": fields[6:],
-        }
-    return catalog
-
-
-def read_snapshot(
-    run_dir: Path,
-    number: int,
-    radius: np.ndarray,
-    catalog: dict[int, dict[str, object]],
-) -> dict[str, np.ndarray | float]:
-    """Read one variable-major, double-precision PLUTO snapshot."""
-    metadata = catalog[number]
-    variables = metadata["variables"]
-    endian = "<" if metadata["endian"] == "little" else ">"
-    path = run_dir / f"data.{number:04d}.dbl"
-    raw = np.fromfile(path, dtype=f"{endian}f8")
-    expected = len(variables) * radius.size
-    if raw.size != expected:
-        raise ValueError(f"{path} has {raw.size} values; expected {expected}")
-    arrays = raw.reshape(len(variables), radius.size)
-    snapshot: dict[str, np.ndarray | float] = dict(zip(variables, arrays))
-    snapshot["time"] = float(metadata["time"])
-    return snapshot
-
-
-def derive_profiles(
-    snapshot: dict[str, np.ndarray | float],
-    radius_km: np.ndarray,
-    physics: str,
-    units: dict[str, float],
-    parameters: dict[str, float],
-) -> dict[str, np.ndarray]:
-    """Convert primitive variables and calculate HD/RHD wind diagnostics."""
-    density_unit = units["UNIT_DENSITY"]
-    length_unit = units["UNIT_LENGTH"]
-    velocity_unit = units["UNIT_VELOCITY"]
-    gamma = parameters["GAMMA"]
-
-    radius_cm = radius_km * length_unit
-    density = np.asarray(snapshot["rho"]) * density_unit
-    velocity = np.asarray(snapshot["vx1"]) * velocity_unit
-    pressure = np.asarray(snapshot["prs"]) * density_unit * velocity_unit**2
-    beta = velocity / C_CGS
-    potential = -G_CGS * parameters["M_NS"] * M_SUN / radius_cm
-    escape_velocity_c = np.sqrt(-2.0 * potential) / C_CGS
-
-    if physics == "HD":
-        sound_speed_c = np.sqrt(gamma * pressure / density) / C_CGS
-        lorentz = np.ones_like(beta)
-        bernoulli_c2 = (
-            0.5 * velocity**2
-            + gamma / (gamma - 1.0) * pressure / density
-            + potential
-        ) / C_CGS**2
-    else:
-        if np.any(np.abs(beta) >= 1.0):
-            raise ValueError("RHD snapshot contains |v| >= c")
-        lorentz = 1.0 / np.sqrt(1.0 - beta**2)
-        # Ideal relativistic EOS: h/c^2 = 1 + Gamma/(Gamma-1) P/(rho c^2).
-        enthalpy = 1.0 + gamma / (gamma - 1.0) * pressure / (density * C_CGS**2)
-        sound_speed_c = np.sqrt(gamma * pressure / (density * C_CGS**2 * enthalpy))
-        # Rest-mass-subtracted SR Bernoulli parameter with the imposed
-        # Newtonian gravitational potential. It reduces to the HD expression
-        # in the non-relativistic limit.
-        bernoulli_c2 = enthalpy * lorentz - 1.0 + potential / C_CGS**2
-
-    mdot_g_s = 4.0 * np.pi * radius_cm**2 * density * lorentz * velocity
-    return {
-        "radius_km": radius_km,
-        "density": density,
-        "velocity_c": beta,
-        "sound_speed_c": sound_speed_c,
-        "escape_velocity_c": escape_velocity_c,
-        "pressure": pressure,
-        "bernoulli_c2": bernoulli_c2,
-        "temperature": (3.0 * pressure / A_RAD_CGS) ** 0.25,
-        "mdot_g_s": mdot_g_s,
-    }
 
 
 def load_run(
@@ -187,25 +39,6 @@ def load_run(
         "current_number": current_number,
         "current_time_ms": float(current["time"]) * time_unit * 1.0e3,
     }
-
-
-def padded_log_limits(arrays: list[np.ndarray]) -> tuple[float, float]:
-    values = np.concatenate(arrays)
-    values = values[np.isfinite(values) & (values > 0.0)]
-    return float(values.min() / 1.35), float(values.max() * 1.35)
-
-
-def padded_linear_limits(
-    arrays: list[np.ndarray],
-    include_zero: bool = False,
-) -> tuple[float, float]:
-    values = np.concatenate(arrays)
-    values = values[np.isfinite(values)]
-    low, high = float(values.min()), float(values.max())
-    if include_zero:
-        low, high = min(low, 0.0), max(high, 0.0)
-    span = high - low or max(abs(low), 1.0)
-    return low - 0.12 * span, high + 0.12 * span
 
 
 def plot_hd_rhd_comparison(

@@ -9,140 +9,31 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-import re
 
 import matplotlib.pyplot as plt
 import numpy as np
 
 
-REPO_DIR = Path(__file__).resolve().parents[1]
+from wind_common import (
+    REPO_DIR, C_CGS, M_SUN, derive_profiles, read_definitions, read_parameters,
+    read_grid, read_catalog, read_snapshot,
+)
+
 DEFAULT_RUN_DIR = REPO_DIR / "problems" / "hd"
-G_CGS = 6.674e-8
-M_SUN = 1.988e33
-A_RAD_CGS = 7.5657e-15
 
 
-def read_definitions(path: Path) -> dict[str, float]:
-    """Read numerical UNIT_* macros from definitions.h."""
-    values: dict[str, float] = {}
-    pattern = re.compile(r"^\s*#define\s+(UNIT_\w+)\s+([^/\s]+)")
-    for line in path.read_text().splitlines():
-        match = pattern.match(line)
-        if match:
-            values[match.group(1)] = float(match.group(2))
-    return values
+def diagnostics(snapshot, radius_code, parameters, units):
+    """Use shared physics while retaining the HD figures' velocity-unit scale.
 
-
-def read_parameters(path: Path) -> dict[str, float]:
-    """Read values from the [Parameters] block in pluto.ini."""
-    values: dict[str, float] = {}
-    in_parameters = False
-    for raw_line in path.read_text().splitlines():
-        line = raw_line.split("#", 1)[0].strip()
-        if not line:
-            continue
-        if line.startswith("["):
-            in_parameters = line.lower() == "[parameters]"
-            continue
-        if in_parameters:
-            name, value, *_ = line.split()
-            values[name] = float(value)
-    return values
-
-
-def read_grid(path: Path) -> np.ndarray:
-    """Return the radial cell centers from grid.out."""
-    lines = [line for line in path.read_text().splitlines()
-             if line.strip() and not line.lstrip().startswith("#")]
-    n1 = int(lines[0])
-    edges = np.array(
-        [[float(value) for value in line.split()[1:3]]
-         for line in lines[1:n1 + 1]]
-    )
-    return edges.mean(axis=1)
-
-
-def read_output_catalog(path: Path) -> dict[int, dict[str, object]]:
-    """Read snapshot metadata from dbl.out."""
-    catalog: dict[int, dict[str, object]] = {}
-    for line in path.read_text().splitlines():
-        fields = line.split()
-        if not fields:
-            continue
-        number = int(fields[0])
-        catalog[number] = {
-            "time": float(fields[1]),
-            "endian": fields[5],
-            "variables": fields[6:],
-        }
-    return catalog
-
-
-def read_snapshot(
-    run_dir: Path,
-    number: int,
-    radius: np.ndarray,
-    catalog: dict[int, dict[str, object]],
-) -> dict[str, np.ndarray | float]:
-    """Read one variable-major PLUTO .dbl snapshot."""
-    metadata = catalog[number]
-    variables = metadata["variables"]
-    endian = "<" if metadata["endian"] == "little" else ">"
-    raw = np.fromfile(run_dir / f"data.{number:04d}.dbl", dtype=f"{endian}f8")
-    expected_size = len(variables) * radius.size
-    if raw.size != expected_size:
-        raise ValueError(
-            f"Snapshot {number} contains {raw.size} values; expected "
-            f"{expected_size} ({len(variables)} variables x {radius.size} cells)."
-        )
-    arrays = raw.reshape(len(variables), radius.size)
-    snapshot: dict[str, np.ndarray | float] = dict(zip(variables, arrays))
-    snapshot["time"] = float(metadata["time"])
-    return snapshot
-
-
-def diagnostics(
-    snapshot: dict[str, np.ndarray | float],
-    radius_km: np.ndarray,
-    parameters: dict[str, float],
-    units: dict[str, float],
-) -> dict[str, np.ndarray]:
-    """Convert primitive variables to cgs and derive wind diagnostics."""
-    rho_code = np.asarray(snapshot["rho"])
-    velocity_code = np.asarray(snapshot["vx1"])
-    pressure_code = np.asarray(snapshot["prs"])
-
-    density_unit = units["UNIT_DENSITY"]
-    length_unit = units["UNIT_LENGTH"]
-    velocity_unit = units["UNIT_VELOCITY"]
-    pressure_unit = density_unit * velocity_unit**2
-    gamma = parameters["GAMMA"]
-
-    radius_cm = radius_km * length_unit
-    density = rho_code * density_unit
-    velocity = velocity_code * velocity_unit
-    pressure = pressure_code * pressure_unit
-    sound_speed = np.sqrt(gamma * pressure / density)
-    mdot_g_s = 4.0 * np.pi * radius_cm**2 * density * velocity
-    phi = -G_CGS * parameters["M_NS"] * M_SUN / radius_cm
-    escape_velocity = np.sqrt(-2.0 * phi)
-    bernoulli = (
-        0.5 * velocity**2
-        + gamma / (gamma - 1.0) * pressure / density
-        + phi
-    ) / velocity_unit**2
-
-    return {
-        "density": density,
-        "pressure": pressure,
-        "velocity_c": velocity / velocity_unit,
-        "sound_speed_c": sound_speed / velocity_unit,
-        "escape_velocity_c": escape_velocity / velocity_unit,
-        "temperature": (3.0 * pressure / A_RAD_CGS) ** 0.25,
-        "mdot_g_s": mdot_g_s,
-        "mdot": mdot_g_s / M_SUN,
-        "bernoulli_c2": bernoulli,
-    }
+    Their historical c label uses UNIT_VELOCITY (a rounded c in this run).
+    The HD/RHD comparison and numerical exports use C_CGS instead.
+    """
+    profile = derive_profiles(snapshot, radius_code, "HD", units, parameters)
+    scale = C_CGS / units["UNIT_VELOCITY"]
+    for key in ("velocity_c", "sound_speed_c", "escape_velocity_c"):
+        profile[key] = profile[key] * scale
+    profile["bernoulli_c2"] = profile["bernoulli_c2"] * scale**2
+    return profile
 
 
 def relative_spread(values: np.ndarray, mask: np.ndarray) -> float:
@@ -173,10 +64,12 @@ def main() -> None:
     args = parser.parse_args()
 
     run_dir = args.run_dir.resolve()
-    units = read_definitions(run_dir / "definitions.h")
+    physics, units = read_definitions(run_dir / "definitions.h")
+    if physics != "HD":
+        raise ValueError(f"Expected an HD run; found {physics}")
     parameters = read_parameters(run_dir / "pluto.ini")
     radius_km = read_grid(run_dir / "grid.out")
-    catalog = read_output_catalog(run_dir / "dbl.out")
+    catalog = read_catalog(run_dir / "dbl.out")
     final_number = max(catalog) if args.final is None else args.final
 
     initial_snapshot = read_snapshot(run_dir, args.initial, radius_km, catalog)
@@ -203,8 +96,8 @@ def main() -> None:
     axes[2].semilogx(radius_km, final["sound_speed_c"], ls="--", label=r"Final $c_s$", **final_style)
     axes[2].set_ylabel(r"Speed [$c$]")
 
-    axes[3].semilogx(radius_km, initial["mdot"], label="Initial", **initial_style)
-    axes[3].semilogx(radius_km, final["mdot"], label="Final", **final_style)
+    axes[3].semilogx(radius_km, (initial["mdot_g_s"] / M_SUN), label="Initial", **initial_style)
+    axes[3].semilogx(radius_km, (final["mdot_g_s"] / M_SUN), label="Final", **final_style)
     axes[3].set_ylabel(r"$\dot{M}$ [$M_\odot$ s$^{-1}$]")
     axes[3].ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
 
@@ -241,7 +134,7 @@ def main() -> None:
     # Exclude the prescribed r <= 12 km region and a few edge cells when
     # measuring how constant the final invariants are.
     active_mask = (radius_km > 12.0) & (radius_km < 0.98 * radius_km.max())
-    mdot_median = np.median(final["mdot"][active_mask])
+    mdot_median = np.median((final["mdot_g_s"] / M_SUN)[active_mask])
     bernoulli_median = np.median(final["bernoulli_c2"][active_mask])
     print(f"Saved {output_path}")
     print(f"Final snapshot: {final_number}")
@@ -249,7 +142,7 @@ def main() -> None:
     print(f"Median final Mdot: {mdot_median:.6e} Msun/s")
     print(
         "Final Mdot 1st-99th percentile relative spread: "
-        f"{100.0 * relative_spread(final['mdot'], active_mask):.4f}%"
+        f"{100.0 * relative_spread(final['mdot_g_s'] / M_SUN, active_mask):.4f}%"
     )
     print(f"Median final Bernoulli parameter: {bernoulli_median:.6e} c^2")
     print(
