@@ -24,8 +24,6 @@
 #define  V_INIT                         4
 #define  V_INF_INIT                     5
 
-/* so  RHO_IN is fixed density at R_0, CS_REL_0 is the relativistic sound speed at R_0, and V_INIT and V_INF_INIT are the initial condition guesses only, not prescriptions */
-
 /* [Beg] user-defined constants (do not change this line) */
 
 #define  UNIT_DENSITY                   1.0e7
