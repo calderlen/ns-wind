@@ -10,7 +10,7 @@ import matplotlib
 matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt
-from matplotlib.animation import FuncAnimation, PillowWriter
+from matplotlib.animation import FFMpegWriter, FuncAnimation
 from matplotlib.lines import Line2D
 import numpy as np
 
@@ -760,7 +760,15 @@ def animate_rmhd_profiles(
     output.parent.mkdir(parents=True, exist_ok=True)
     animation.save(
         output,
-        writer=PillowWriter(fps=args.fps),
+        writer=FFMpegWriter(
+            fps=args.fps,
+            codec="gif",
+            extra_args=[
+                "-filter_complex",
+                "split[a][b];[a]palettegen=stats_mode=single[p];"
+                "[b][p]paletteuse=new=1",
+            ],
+        ),
         dpi=args.dpi,
         progress_callback=lambda frame, total: print(
             f"Rendering frame {frame + 1}/{total}", end="\r", flush=True
