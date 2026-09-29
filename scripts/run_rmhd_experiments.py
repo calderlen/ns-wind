@@ -46,6 +46,7 @@ class Suite:
     output_dir: Path
     baseline_values: dict[str, str]
     experiments: tuple[Experiment, ...]
+    control_experiment: str = "resolution_2x"
 
 
 COMMON_BASELINE_VALUES = {
@@ -148,6 +149,21 @@ ROTATION_EXPERIMENTS = (
     ),
 )
 
+def thermal_experiments(mass: str) -> tuple[Experiment, ...]:
+    return tuple(
+        Experiment(
+            f"CS_REL_0_{value.replace('.', 'p')}",
+            "thermal",
+            "CS_REL_0",
+            value,
+            f"Base relativistic sound speed {value} c at M_NS={mass} Msun.",
+        )
+        for value in ("0.236", "0.25", "0.26", "0.27", "0.28")
+    )
+
+
+THERMAL_M2_EXPERIMENTS = thermal_experiments("2.0")
+
 SUITES = {
     "nonrotating": Suite(
         key="nonrotating",
@@ -164,6 +180,42 @@ SUITES = {
         output_dir=REPO_DIR / "runs" / "rmhd_rot_experiments",
         baseline_values={**COMMON_BASELINE_VALUES, "P_ROT_MS": "8.0"},
         experiments=COMMON_EXPERIMENTS + ROTATION_EXPERIMENTS,
+    ),
+    "thermal_m2": Suite(
+        key="thermal_m2",
+        label="nonrotating RMHD thermal scan at 2.0 Msun",
+        baseline_dir=REPO_DIR / "problems" / "rmhd_mpi",
+        output_dir=REPO_DIR / "runs" / "rmhd_thermal_m2_experiments",
+        baseline_values={**COMMON_BASELINE_VALUES, "M_NS": "2.0"},
+        experiments=THERMAL_M2_EXPERIMENTS,
+        control_experiment="CS_REL_0_0p236",
+    ),
+    "thermal_m1p8": Suite(
+        key="thermal_m1p8",
+        label="nonrotating RMHD thermal scan at 1.8 Msun",
+        baseline_dir=REPO_DIR / "problems" / "rmhd_mpi",
+        output_dir=REPO_DIR / "runs" / "rmhd_thermal_m1p8_experiments",
+        baseline_values={**COMMON_BASELINE_VALUES, "M_NS": "1.8"},
+        experiments=thermal_experiments("1.8"),
+        control_experiment="CS_REL_0_0p236",
+    ),
+    "rot_thermal_m2": Suite(
+        key="rot_thermal_m2",
+        label="rotating RMHD thermal scan at 2.0 Msun (8 ms)",
+        baseline_dir=REPO_DIR / "problems" / "rmhd_rot_mpi",
+        output_dir=REPO_DIR / "runs" / "rmhd_rot_thermal_m2_experiments",
+        baseline_values={**COMMON_BASELINE_VALUES, "M_NS": "2.0", "P_ROT_MS": "8.0"},
+        experiments=thermal_experiments("2.0"),
+        control_experiment="CS_REL_0_0p236",
+    ),
+    "rot_thermal_m1p8": Suite(
+        key="rot_thermal_m1p8",
+        label="rotating RMHD thermal scan at 1.8 Msun (8 ms)",
+        baseline_dir=REPO_DIR / "problems" / "rmhd_rot_mpi",
+        output_dir=REPO_DIR / "runs" / "rmhd_rot_thermal_m1p8_experiments",
+        baseline_values={**COMMON_BASELINE_VALUES, "M_NS": "1.8", "P_ROT_MS": "8.0"},
+        experiments=thermal_experiments("1.8"),
+        control_experiment="CS_REL_0_0p236",
     ),
 }
 
@@ -206,6 +258,8 @@ def configured_pluto_ini(suite: Suite, experiment: Experiment) -> str:
     """Render one high-resolution experiment from its control input."""
     ini_text = (suite.baseline_dir / "pluto.ini").read_text()
     ini_text = replace_x1_grid(ini_text)
+    for key, value in suite.baseline_values.items():
+        ini_text = replace_parameter(ini_text, key, value)
     if experiment.varied_quantity in suite.baseline_values:
         ini_text = replace_parameter(
             ini_text, experiment.varied_quantity, experiment.value
@@ -249,7 +303,7 @@ def ensure_baseline(suite: Suite) -> None:
     definitions = (suite.baseline_dir / "definitions.h").read_text()
     if not re.search(r"^#define\s+PHYSICS\s+RMHD\s*$", definitions, re.MULTILINE):
         raise SystemExit(f"Expected an RMHD baseline in {suite.baseline_dir}")
-    if suite.key == "rotating" and "P_ROT_MS" not in definitions:
+    if "P_ROT_MS" in suite.baseline_values and "P_ROT_MS" not in definitions:
         raise SystemExit(f"Rotating baseline {suite.baseline_dir} lacks P_ROT_MS")
 
 
@@ -328,11 +382,12 @@ def write_suite_manifest(suite: Suite) -> None:
             "directory": str(suite.baseline_dir),
             "values": suite.baseline_values,
             "description": (
-                "Original 1025-cell control used only for convergence comparison."
+                "Source problem directory; suite baseline values are applied "
+                "before each experiment's parameter variation."
             ),
         },
         "survey_control": {
-            "directory": str(suite.output_dir / "resolution_2x"),
+            "directory": str(suite.output_dir / suite.control_experiment),
             "values": suite.baseline_values,
             "description": (
                 "2050-cell control used as the reference for every parameter variant."
@@ -500,9 +555,10 @@ def run_experiment(suite: Suite, experiment: Experiment, ranks: int) -> str:
 
 def list_experiments(suite: Suite) -> None:
     print(f"Suite: {suite.label}")
-    print(f"Original 1025-cell convergence control: {suite.baseline_dir}")
+    print(f"Source problem directory: {suite.baseline_dir}")
+    print(f"Reference M_NS: {suite.baseline_values['M_NS']} Msun")
     print("Every listed experiment uses the 2050-cell high-resolution grid.")
-    print("resolution_2x supplies the baseline parameter point for the survey.\n")
+    print(f"{suite.control_experiment} supplies the baseline parameter point for the survey.\n")
     print(f"{'experiment':<18} {'group':<11} {'varied quantity':<17} value")
     print("-" * 65)
     for experiment in suite.experiments:
@@ -518,7 +574,7 @@ def parse_args() -> argparse.Namespace:
         "--suite",
         choices=tuple(SUITES),
         required=True,
-        help="Choose the nonrotating or rotating RMHD suite.",
+        help="Choose the nonrotating, rotating, or fixed-mass thermal RMHD suite.",
     )
     parser.add_argument(
         "--ranks",
@@ -528,7 +584,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--group",
-        choices=("all", "resolution", "parameters", "stellar", "magnetic", "rotation"),
+        choices=("all", "resolution", "parameters", "stellar", "magnetic", "rotation", "thermal"),
         default="all",
         help="Run the full suite or one parameter group (default: all)",
     )

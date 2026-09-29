@@ -1,4 +1,4 @@
-"""Animate saved 1D relativistic-magnetohydrodynamic wind profiles."""
+"""Animate or export saved 1D relativistic-magnetohydrodynamic wind profiles."""
 
 from __future__ import annotations
 
@@ -15,9 +15,10 @@ from matplotlib.lines import Line2D
 import numpy as np
 
 from wind_common import (
-    C_CGS, REPO_DIR, derive_profiles, first_outward_zero_crossing,
-    read_definitions, read_catalog, read_grid, read_parameters, read_snapshot,
+    REPO_DIR, first_outward_zero_crossing, read_definitions, read_catalog,
+    read_grid, read_parameters, read_snapshot,
 )
+from rmhd_diagnostics import derive_rmhd_profiles
 from plot_helpers import (
     padded_linear_limits, padded_log_limits, signed_log_limits,
     scientific_latex, sample_histories,
@@ -41,117 +42,6 @@ plt.rcParams.update(
 )
 
 
-def derive_rmhd_profiles(
-    snapshot: dict[str, np.ndarray | float],
-    radius_km: np.ndarray,
-    units: dict[str, float],
-    parameters: dict[str, float],
-) -> dict[str, np.ndarray]:
-    """Convert RMHD primitives to cgs profiles and presentation diagnostics."""
-    required = {"rho", "vx1", "vx2", "vx3", "Bx1", "Bx2", "Bx3", "prs"}
-    missing = required - snapshot.keys()
-    if missing:
-        raise ValueError(f"RMHD snapshot is missing variables: {sorted(missing)}")
-
-    density_unit = units["UNIT_DENSITY"]
-    length_unit = units["UNIT_LENGTH"]
-    velocity_unit = units["UNIT_VELOCITY"]
-    fluid = derive_profiles(snapshot, radius_km, "RMHD", units, parameters)
-    density_code = np.asarray(snapshot["rho"])
-    beta_r = fluid["velocity_c"]
-    beta_theta = np.asarray(snapshot["vx2"]) * velocity_unit / C_CGS
-    beta_phi = np.asarray(snapshot["vx3"]) * velocity_unit / C_CGS
-    gamma = fluid["lorentz_gamma"]
-    enthalpy = fluid["enthalpy_c2"]
-    radius_cm = radius_km * length_unit
-
-    field_unit = velocity_unit * np.sqrt(4.0 * np.pi * density_unit)
-    field_r_code = np.asarray(snapshot["Bx1"])
-    field_theta_code = np.asarray(snapshot["Bx2"])
-    field_phi_code = np.asarray(snapshot["Bx3"])
-    field_r = field_r_code * field_unit
-    field_theta = field_theta_code * field_unit
-    field_phi = field_phi_code * field_unit
-
-    beta_dot_field_code = (
-        beta_r * field_r_code
-        + beta_theta * field_theta_code
-        + beta_phi * field_phi_code
-    )
-    comoving_field_squared_code = (
-        (field_r_code**2 + field_theta_code**2 + field_phi_code**2) / gamma**2
-        + beta_dot_field_code**2
-    )
-    magnetization = comoving_field_squared_code / (density_code * enthalpy)
-    alfven_speed_c = np.sqrt(magnetization / (1.0 + magnetization))
-
-    # Axial angular-momentum flux through a spherical surface.  The stress
-    # T^r_phi is written in the same covariant-b formulation used by PLUTO's
-    # RMHD flux function.  Multiplying by 4*pi*r^3 gives the 1D spherical,
-    # equatorial-equivalent torque (angular momentum per unit time).
-    b0_code = gamma * beta_dot_field_code
-    b_r_code = field_r_code / gamma + b0_code * beta_r
-    b_phi_code = field_phi_code / gamma + b0_code * beta_phi
-    fluid_rphi_code = density_code * enthalpy * gamma**2 * beta_r * beta_phi
-    electromagnetic_rphi_code = (
-        comoving_field_squared_code * gamma**2 * beta_r * beta_phi
-        - b_r_code * b_phi_code
-    )
-    torque_scale = (
-        4.0
-        * np.pi
-        * radius_cm**3
-        * density_unit
-        * velocity_unit**2
-    )
-    angular_momentum_fluid = torque_scale * fluid_rphi_code
-    angular_momentum_electromagnetic = torque_scale * electromagnetic_rphi_code
-    angular_momentum_total = (
-        angular_momentum_fluid + angular_momentum_electromagnetic
-    )
-
-    # Ideal-MHD radial Poynting luminosity. Expanding the transverse terms
-    # avoids catastrophic cancellation when velocity and field are radial.
-    velocity_r = beta_r * C_CGS
-    velocity_theta = beta_theta * C_CGS
-    velocity_phi = beta_phi * C_CGS
-    poynting_power = radius_cm**2 * (
-        velocity_r * (field_theta**2 + field_phi**2)
-        - field_r * (velocity_theta * field_theta + velocity_phi * field_phi)
-    )
-    total_power = fluid["edot_kin_erg_s"] + poynting_power
-
-    field_ratio = np.divide(
-        field_phi,
-        field_r,
-        out=np.full_like(field_phi, np.nan),
-        where=field_r != 0.0,
-    )
-    return {
-        "radius_km": fluid["radius_km"],
-        "density": fluid["density"],
-        "pressure": fluid["pressure"],
-        "temperature": fluid["temperature"],
-        "velocity_c": beta_r,
-        "velocity_phi_c": beta_phi,
-        "sound_speed_c": fluid["sound_speed_c"],
-        "alfven_speed_c": alfven_speed_c,
-        "escape_velocity_c": fluid["escape_velocity_c"],
-        "fluid_bernoulli_c2": fluid["bernoulli_c2"],
-        "mdot_g_s": fluid["mdot_g_s"],
-        "kinetic_power_erg_s": fluid["edot_kin_erg_s"],
-        "poynting_power_erg_s": poynting_power,
-        "total_power_erg_s": total_power,
-        "angular_momentum_fluid_erg": angular_momentum_fluid,
-        "angular_momentum_electromagnetic_erg": angular_momentum_electromagnetic,
-        "angular_momentum_total_erg": angular_momentum_total,
-        "field_r_gauss": field_r,
-        "field_phi_gauss": field_phi,
-        "field_phi_over_r": field_ratio,
-        "magnetization": magnetization,
-    }
-
-
 def _time_limits(times: np.ndarray) -> tuple[float, float]:
     if times.size > 1 and times[-1] > times[0]:
         return float(times[0]), float(times[-1])
@@ -166,14 +56,14 @@ def animate_rmhd_profiles(
     default_run_dir: Path = DEFAULT_RUN_DIR,
     default_output_name: str = DEFAULT_OUTPUT_NAME,
 ) -> Path:
-    """Build an RMHD preview or GIF and return the written path."""
+    """Build an RMHD preview, final-profile PDF, or GIF and return its path."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--run-dir", type=Path, default=default_run_dir)
     parser.add_argument(
         "--output",
         type=Path,
         default=None,
-        help="Output GIF (default: <run-dir>/plots/<animation-name>.gif)",
+        help="Output path (default: <run-dir>/plots/<animation-name>.gif; --pdf uses .pdf)",
     )
     parser.add_argument("--fps", type=float, default=20.0)
     parser.add_argument("--dpi", type=int, default=200)
@@ -183,10 +73,16 @@ def animate_rmhd_profiles(
         default=1,
         help="Animate every Nth snapshot while always including the latest one.",
     )
-    parser.add_argument(
+    export = parser.add_mutually_exclusive_group()
+    export.add_argument(
         "--preview",
         action="store_true",
         help="Save the latest-frame layout as a PNG instead of encoding a GIF.",
+    )
+    export.add_argument(
+        "--pdf",
+        action="store_true",
+        help="Save final radial profiles and time histories as a vector PDF.",
     )
     args = parser.parse_args(argv)
 
@@ -620,6 +516,8 @@ def animate_rmhd_profiles(
     axes[4, 2].set_xlabel(r"$t\;[\mathrm{ms}]$")
 
     for axis in axes.ravel():
+        if axis.get_yscale() == "symlog":
+            axis.yaxis.get_major_locator().set_params(numticks=7)
         axis.tick_params(
             axis="both", which="major", direction="in",
             length=7.0, width=1.1, labelsize=10, pad=4,
@@ -654,6 +552,7 @@ def animate_rmhd_profiles(
         rotation_text = rf",\quad P_{{\rm rot}}={parameters['P_ROT_MS']:g}\,\mathrm{{ms}}"
     parameter_title = (
         rf"$M_{{\rm NS}}={parameters['M_NS']:g}\,M_\odot"
+        rf",\quad c_{{s,0}}={parameters['CS_REL_0']:g}\,c"
         rf",\quad \rho_0={scientific_latex(parameters['RHO_IN'])}"
         rf"\,\mathrm{{g\,cm^{{-3}}}}"
         rf",\quad B_0={scientific_latex(parameters['B_SURF'])}\,\mathrm{{G}}"
@@ -736,18 +635,45 @@ def animate_rmhd_profiles(
         )
 
     update(0)
-    if args.preview:
+    if args.preview or args.pdf:
         update(len(snapshot_numbers) - 1)
-        preview_path = output.with_name(output.stem + "_preview.png")
-        preview_path.parent.mkdir(parents=True, exist_ok=True)
-        fig.savefig(preview_path, dpi=args.dpi, bbox_inches="tight")
+        frame_path = (
+            output.with_suffix(".pdf") if args.pdf
+            else output.with_name(output.stem + "_preview.png")
+        )
+        frame_path.parent.mkdir(parents=True, exist_ok=True)
+        if args.pdf:
+            grid.update(hspace=0.12)
+            # Keep labels clear of ticks with consistent PDF renderer margins.
+            for (_, col), axis in np.ndenumerate(axes):
+                axis.yaxis.set_label_coords(1.22 if col == 2 else -0.22, 0.5)
+            # Fix static tick positions, keeping the zero crossing readable.
+            fig.canvas.draw()
+            min_spacing = 18.0 * fig.dpi / 72.0
+            for axis in axes.ravel():
+                if axis.get_yscale() != "symlog":
+                    continue
+                low, high = axis.get_ylim()
+                ticks = [tick for tick in axis.get_yticks() if low <= tick <= high]
+                kept, positions = [], []
+                for tick in sorted(ticks, key=abs):
+                    position = axis.transData.transform((0.0, tick))[1]
+                    if all(abs(position - other) >= min_spacing for other in positions):
+                        kept.append(tick)
+                        positions.append(position)
+                axis.set_yticks(sorted(kept))
+                axis.set_ylim(low, high)
+            fig.canvas.draw()
+            fig.savefig(frame_path, bbox_inches="tight", pad_inches=0.20)
+        else:
+            fig.savefig(frame_path, dpi=args.dpi, bbox_inches="tight")
         plt.close(fig)
-        print(f"Saved {preview_path}")
+        print(f"Saved {frame_path}")
         print(
             f"Latest completed snapshot: {snapshot_numbers[-1]} "
             f"({times[-1]:.3f} ms)"
         )
-        return preview_path
+        return frame_path
 
     animation = FuncAnimation(
         fig,
@@ -764,6 +690,7 @@ def animate_rmhd_profiles(
             fps=args.fps,
             codec="gif",
             extra_args=[
+                "-threads", "1", "-filter_complex_threads", "1",
                 "-filter_complex",
                 "split[a][b];[a]palettegen=stats_mode=single[p];"
                 "[b][p]paletteuse=new=1",

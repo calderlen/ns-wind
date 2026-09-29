@@ -12,6 +12,42 @@
 */
 /* ///////////////////////////////////////////////////////////////////// */
 #include "pluto.h"
+#include <float.h>
+
+
+/* Find the first exterior cell globally in this 1D radial problem.  An MPI
+ * subdomain can lie entirely inside the stellar boundary. */
+static double StellarRadialVelocity(const Data *d, Grid *grid, double R_in)
+{
+  int i_live = IBEG;
+  double v_base = 0.0;
+  double *x1 = grid->x[IDIR];
+
+  while (i_live <= IEND && x1[i_live] <= R_in) i_live++;
+
+#ifdef PARALLEL
+  struct { double radius; int rank; } local, first;
+
+  local.radius = (i_live <= IEND) ? x1[i_live] : DBL_MAX;
+  local.rank = prank;
+  MPI_Allreduce(&local, &first, 1, MPI_DOUBLE_INT, MPI_MINLOC,
+                MPI_COMM_WORLD);
+  if (first.radius == DBL_MAX) {
+    printLog("! Cannot find a live cell outside R_in in the global grid\n");
+    QUIT_PLUTO(1);
+  }
+  if (prank == first.rank) v_base = d->Vc[VX1][KBEG][JBEG][i_live];
+  MPI_Bcast(&v_base, 1, MPI_DOUBLE, first.rank, MPI_COMM_WORLD);
+#else
+  if (i_live > IEND) {
+    printLog("! Cannot find a live cell outside R_in\n");
+    QUIT_PLUTO(1);
+  }
+  v_base = d->Vc[VX1][KBEG][JBEG][i_live];
+#endif
+
+  return v_base;
+}
 
 
 static double StellarOmega(void)
@@ -235,7 +271,6 @@ void UserDefBoundary (const Data *d, RBox *box, int side, Grid *grid)
 
   double rho_in, R_in, Bstar_code;
   double cs0, cs02, theta0, p0;
-  int i_live;
 
   g_gamma = g_inputParam[GAMMA];
   rho_in = g_inputParam[RHO_IN]/UNIT_DENSITY;
@@ -263,25 +298,15 @@ void UserDefBoundary (const Data *d, RBox *box, int side, Grid *grid)
 
   if (side == 0) {
 
-  i_live = IBEG;
-
-  while (i_live <= IEND && x1[i_live] <= R_in) {
-    i_live++;
-  }
-
-  if (i_live > IEND) {
-    printLog("! Cannot find a live cell outside R_in\n");
-    QUIT_PLUTO(1);
-  }
+  double v_base = StellarRadialVelocity(d, grid, R_in);
 
   TOT_LOOP(k,j,i) {
 
     if (x1[i] <= R_in) {
 
-      double rho_bc, v_base, vphi;
+      double rho_bc, vphi;
 
       rho_bc = rho_in*pow(R_in/x1[i], 2.0);
-      v_base = d->Vc[VX1][k][j][i_live];
       vphi   = StellarVphi(x1[i]);
 
       if (v_base*v_base + vphi*vphi >= 1.0){
