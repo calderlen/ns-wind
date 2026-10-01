@@ -181,6 +181,23 @@ SUITES = {
         baseline_values={**COMMON_BASELINE_VALUES, "P_ROT_MS": "8.0"},
         experiments=COMMON_EXPERIMENTS + ROTATION_EXPERIMENTS,
     ),
+    "gamma1p1": Suite(
+        key="gamma1p1",
+        label="nonrotating phenomenological RMHD wind (Gamma=1.1)",
+        baseline_dir=REPO_DIR / "problems" / "rmhd_mpi",
+        output_dir=REPO_DIR / "runs" / "rmhd_gamma1p1_experiments",
+        baseline_values={
+            **COMMON_BASELINE_VALUES, "GAMMA": "1.1", "CS_REL_0": "0.136",
+        },
+        experiments=(Experiment(
+            "CS_REL_0_0p136", "thermal", "CS_REL_0", "0.136",
+            "Calibrated Gamma=1.1 nonrotating wind at M_NS=1.4 Msun, "
+            "rho0=1e12 g/cm^3, and B_SURF=1e14 G. "
+            "Comparison uses the existing grid, initial velocity guesses, "
+            "entropy recovery, and 0.334-second stop time.",
+        ),),
+        control_experiment="CS_REL_0_0p136",
+    ),
     "thermal_m2": Suite(
         key="thermal_m2",
         label="nonrotating RMHD thermal scan at 2.0 Msun",
