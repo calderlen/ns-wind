@@ -17,7 +17,7 @@ import shutil
 import subprocess
 import sys
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
 
@@ -47,6 +47,9 @@ class Suite:
     baseline_values: dict[str, str]
     experiments: tuple[Experiment, ...]
     control_experiment: str = "resolution_2x"
+    parameter_overrides: dict[str, dict[str, str]] = field(default_factory=dict)
+    extra_files: tuple[str, ...] = ()
+    profile_dir: Path | None = None
 
 
 COMMON_BASELINE_VALUES = {
@@ -164,6 +167,23 @@ def thermal_experiments(mass: str) -> tuple[Experiment, ...]:
 
 THERMAL_M2_EXPERIMENTS = thermal_experiments("2.0")
 
+ROT_GAMMA1P1_POINTS = (("3e15", "1e11"), ("1e15", "1e11"), ("3e15", "1e10"))
+ROT_GAMMA1P1_OVERRIDES = {
+    f"P_ROT_MS_{period}_B_SURF_{magnetic_field}_RHO_IN_{density}": {
+        "P_ROT_MS": str(period), "B_SURF": magnetic_field, "RHO_IN": density,
+    }
+    for period in (8, 4, 16)
+    for magnetic_field, density in ROT_GAMMA1P1_POINTS
+}
+ROT_GAMMA1P1_EXPERIMENTS = tuple(
+    Experiment(
+        name, "rotation", "P_ROT_MS", values["P_ROT_MS"],
+        f"Rotating Gamma=1.1 wind: P_ROT_MS={values['P_ROT_MS']} ms, "
+        f"B_SURF={values['B_SURF']} G, RHO_IN={values['RHO_IN']} g/cm^3.",
+    )
+    for name, values in ROT_GAMMA1P1_OVERRIDES.items()
+)
+
 SUITES = {
     "nonrotating": Suite(
         key="nonrotating",
@@ -197,6 +217,21 @@ SUITES = {
             "entropy recovery, and 0.334-second stop time.",
         ),),
         control_experiment="CS_REL_0_0p136",
+    ),
+    "rot_gamma1p1": Suite(
+        key="rot_gamma1p1",
+        label="rotating phenomenological RMHD wind (Gamma=1.1)",
+        baseline_dir=REPO_DIR / "problems" / "rmhd_rot_gamma1p1_mpi",
+        output_dir=REPO_DIR / "runs" / "rmhd_rot_gamma1p1_experiments",
+        baseline_values={
+            **COMMON_BASELINE_VALUES, "GAMMA": "1.1", "CS_REL_0": "0.136",
+            "P_ROT_MS": "8", "B_SURF": "3e15", "RHO_IN": "1e11",
+        },
+        experiments=ROT_GAMMA1P1_EXPERIMENTS,
+        control_experiment="P_ROT_MS_8_B_SURF_3e15_RHO_IN_1e11",
+        parameter_overrides=ROT_GAMMA1P1_OVERRIDES,
+        extra_files=("tvdlf.c",),
+        profile_dir=REPO_DIR / "problems" / "rmhd_rot_gamma1p1_mpi" / "initial_profiles",
     ),
     "thermal_m2": Suite(
         key="thermal_m2",
@@ -283,6 +318,8 @@ def configured_pluto_ini(suite: Suite, experiment: Experiment) -> str:
         )
     elif experiment.varied_quantity != "radial_cells":
         raise RuntimeError(f"No pluto.ini edit defined for {experiment.name}")
+    for key, value in suite.parameter_overrides.get(experiment.name, {}).items():
+        ini_text = replace_parameter(ini_text, key, value)
     return ini_text
 
 
@@ -308,7 +345,7 @@ def select_experiments(
 def ensure_baseline(suite: Suite) -> None:
     missing = [
         filename
-        for filename in FILES_TO_COPY
+        for filename in FILES_TO_COPY + suite.extra_files
         if not (suite.baseline_dir / filename).is_file()
     ]
     if missing:
@@ -337,10 +374,34 @@ def has_partial_output(run_dir: Path) -> bool:
     )
 
 
+def initial_profile(suite: Suite, experiment: Experiment, ini_text: str) -> Path | None:
+    """Select a profile calibrated for this exact rotating parameter point."""
+    if suite.profile_dir is None:
+        return None
+    manifest = json.loads((suite.profile_dir / "manifest.json").read_text())
+    for filename, expected in manifest["model_source_sha256"].items():
+        if sha256(suite.baseline_dir / filename) != expected:
+            raise RuntimeError(f"Initial profiles need recalibration after changing {filename}")
+    profile = manifest["profiles"][experiment.name]
+    for key, expected in profile["parameters"].items():
+        matches = re.findall(rf"^\s*{re.escape(key)}\s+(\S+)\s*$", ini_text, re.MULTILINE)
+        if len(matches) != 1 or float(matches[0]) != float(expected):
+            raise RuntimeError(f"Initial profile {experiment.name} does not match {key}")
+    filename = Path(profile["file"])
+    if filename.is_absolute() or len(filename.parts) != 1:
+        raise RuntimeError(f"Invalid initial profile filename: {filename}")
+    path = suite.profile_dir / filename
+    if sha256(path) != profile["sha256"]:
+        raise RuntimeError(f"Initial profile checksum changed: {path}")
+    return path
+
+
 def prepare_experiment(suite: Suite, experiment: Experiment) -> Path:
     run_dir = suite.output_dir / experiment.name
     metadata_path = run_dir / "experiment.json"
     expected_ini = configured_pluto_ini(suite, experiment)
+    profile = initial_profile(suite, experiment, expected_ini)
+    files_to_copy = FILES_TO_COPY + suite.extra_files
 
     if run_dir.exists():
         if not metadata_path.is_file():
@@ -352,6 +413,23 @@ def prepare_experiment(suite: Suite, experiment: Experiment) -> Path:
             raise RuntimeError(f"Suite identity changed for {run_dir}")
         if existing.get("experiment") != asdict(experiment):
             raise RuntimeError(f"Experiment definition changed for {run_dir}")
+        # A native rebuild may refresh prepared cases before their first run.
+        # Once output exists, preserve the exact source, binary and seed used.
+        if profile is not None:
+            sources = {
+                filename: suite.baseline_dir / filename
+                for filename in files_to_copy if filename != "pluto.ini"
+            }
+            sources["seed_profiles.dat"] = profile
+            changed = {
+                filename: source for filename, source in sources.items()
+                if not (run_dir / filename).is_file()
+                or sha256(run_dir / filename) != sha256(source)
+            }
+            if changed and (has_partial_output(run_dir) or (run_dir / "run_complete.json").exists()):
+                raise RuntimeError(f"Cannot update {run_dir}: it already contains run output")
+        else:
+            changed = {}
         ini_path = run_dir / "pluto.ini"
         if ini_path.read_text() != expected_ini:
             if has_partial_output(run_dir):
@@ -365,14 +443,24 @@ def prepare_experiment(suite: Suite, experiment: Experiment) -> Path:
             print(f"Updated configuration: {experiment.name}")
         else:
             print(f"Prepared already: {experiment.name}")
+        if changed:
+            for filename, source in changed.items():
+                shutil.copy2(source, run_dir / filename)
+                existing["copied_file_sha256"][filename] = sha256(run_dir / filename)
+            existing["updated_at"] = timestamp()
+            metadata_path.write_text(json.dumps(existing, indent=2) + "\n")
+            print(f"Updated prepared inputs: {experiment.name}")
         return run_dir
 
     run_dir.mkdir(parents=True)
-    for filename in FILES_TO_COPY:
+    for filename in files_to_copy:
         shutil.copy2(suite.baseline_dir / filename, run_dir / filename)
 
     ini_path = run_dir / "pluto.ini"
     ini_path.write_text(expected_ini)
+    if profile is not None:
+        shutil.copy2(profile, run_dir / "seed_profiles.dat")
+        files_to_copy += ("seed_profiles.dat",)
 
     metadata = {
         "suite": suite.key,
@@ -382,7 +470,7 @@ def prepare_experiment(suite: Suite, experiment: Experiment) -> Path:
         "baseline_directory": str(suite.baseline_dir),
         "baseline_values": suite.baseline_values,
         "copied_file_sha256": {
-            filename: sha256(run_dir / filename) for filename in FILES_TO_COPY
+            filename: sha256(run_dir / filename) for filename in files_to_copy
         },
     }
     metadata_path.write_text(json.dumps(metadata, indent=2) + "\n")
@@ -417,6 +505,10 @@ def write_suite_manifest(suite: Suite) -> None:
             "each uses MPI internally."
         ),
     }
+    if suite.parameter_overrides:
+        manifest["parameter_overrides"] = suite.parameter_overrides
+    if suite.profile_dir is not None:
+        manifest["initial_profiles"] = str(suite.profile_dir)
     (suite.output_dir / "suite_manifest.json").write_text(
         json.dumps(manifest, indent=2) + "\n"
     )
@@ -576,11 +668,12 @@ def list_experiments(suite: Suite) -> None:
     print(f"Reference M_NS: {suite.baseline_values['M_NS']} Msun")
     print("Every listed experiment uses the 2050-cell high-resolution grid.")
     print(f"{suite.control_experiment} supplies the baseline parameter point for the survey.\n")
-    print(f"{'experiment':<18} {'group':<11} {'varied quantity':<17} value")
-    print("-" * 65)
+    name_width = max(18, max(len(item.name) for item in suite.experiments))
+    print(f"{'experiment':<{name_width}} {'group':<11} {'varied quantity':<17} value")
+    print("-" * (65 + name_width - 18))
     for experiment in suite.experiments:
         print(
-            f"{experiment.name:<18} {experiment.group:<11} "
+            f"{experiment.name:<{name_width}} {experiment.group:<11} "
             f"{experiment.varied_quantity:<17} {experiment.value}"
         )
 

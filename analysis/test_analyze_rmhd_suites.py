@@ -8,7 +8,7 @@ from analyze_rmhd_suites import _json_safe, _robust_relative_span
 from rmhd_diagnostics import (
     derive_rmhd_profiles, interpolate_profile, outward_crossing_radii,
 )
-from wind_common import C_CGS
+from wind_common import C_CGS, G_CGS, M_SUN
 
 
 UNITS = {
@@ -167,7 +167,7 @@ class RMHDProfileTests(unittest.TestCase):
             self.assertTrue(np.all(np.isfinite(profile[key])), key)
         np.testing.assert_allclose(profile["field_phi_over_r"], -0.3)
 
-    def test_total_power_includes_fluid_enthalpy_and_em(self):
+    def test_total_power_includes_fluid_enthalpy_em_and_gravity(self):
         for beta_r in (0.2, -0.2):
             with self.subTest(beta_r=beta_r):
                 profile = derive_rmhd_profiles(
@@ -179,8 +179,13 @@ class RMHDProfileTests(unittest.TestCase):
                 expected = (
                     profile["mdot_g_s"] * (h*gamma - 1.0) * C_CGS**2
                     + profile["poynting_power_erg_s"]
+                    - profile["mdot_g_s"] * G_CGS * PARAMETERS["M_NS"] * M_SUN
+                    / (self.radius * UNITS["UNIT_LENGTH"])
                 )
                 np.testing.assert_allclose(profile["total_power_erg_s"], expected)
+                self.assertTrue(np.all(
+                    np.sign(profile["gravitational_power_erg_s"]) == -np.sign(beta_r)
+                ))
                 np.testing.assert_allclose(
                     profile["thermal_enthalpy_power_erg_s"],
                     profile["mdot_g_s"] * gamma * (h - 1.0) * C_CGS**2,
@@ -189,7 +194,8 @@ class RMHDProfileTests(unittest.TestCase):
                     profile["total_power_erg_s"],
                     profile["kinetic_power_erg_s"]
                     + profile["thermal_enthalpy_power_erg_s"]
-                    + profile["poynting_power_erg_s"],
+                    + profile["poynting_power_erg_s"]
+                    + profile["gravitational_power_erg_s"],
                 )
                 np.testing.assert_allclose(
                     profile["kinetic_plus_poynting_erg_s"],
@@ -203,17 +209,19 @@ class RMHDProfileTests(unittest.TestCase):
         )
         self.assertTrue(np.all(np.isfinite(profile["total_power_erg_s"])))
         np.testing.assert_allclose(profile["thermal_enthalpy_power_erg_s"], 0.0)
+        np.testing.assert_allclose(profile["gravitational_power_erg_s"], 0.0)
         np.testing.assert_allclose(
             profile["total_power_erg_s"], profile["poynting_power_erg_s"]
         )
 
-    def test_cold_total_power_reduces_to_kinetic_plus_em(self):
+    def test_cold_total_power_includes_gravity(self):
         cold = snapshot(beta_phi=0.1, bphi=-0.03)
         cold["prs"][:] = 0.0
         profile = derive_rmhd_profiles(cold, self.radius, UNITS, PARAMETERS)
         np.testing.assert_allclose(profile["thermal_enthalpy_power_erg_s"], 0.0)
         np.testing.assert_allclose(
-            profile["total_power_erg_s"], profile["kinetic_plus_poynting_erg_s"]
+            profile["total_power_erg_s"],
+            profile["kinetic_plus_poynting_erg_s"] + profile["gravitational_power_erg_s"],
         )
 
     def test_interpolation_is_exact_radius_not_nearest_cell(self):

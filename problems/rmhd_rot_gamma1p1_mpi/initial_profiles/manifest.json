@@ -1,0 +1,224 @@
+{
+  "method": "Isentropic inward reservoir including rigid rotation and configured total-energy gravity source; smooth thermal radial initialization with nonzero azimuthal velocity",
+  "source_physics": "rotating RMHD, ideal Gamma-law EOS, Gamma=1.1",
+  "profile_radius_km": [
+    10,
+    11000
+  ],
+  "profile_rows": 4500,
+  "runtime_verified": false,
+  "profiles": {
+    "P_ROT_MS_8_B_SURF_3e15_RHO_IN_1e11": {
+      "file": "P_ROT_MS_8_B_SURF_3e15_RHO_IN_1e11.dat",
+      "parameters": {
+        "M_NS": 1.4,
+        "GAMMA": 1.1,
+        "RHO_IN": 100000000000.0,
+        "CS_REL_0": 0.136,
+        "V_INIT": 0.07,
+        "V_INF_INIT": 0.25,
+        "B_SURF": 3000000000000000.0,
+        "P_ROT_MS": 8.0
+      },
+      "sha256": "101bd0c12d4858f3bd3b7dd44d628a5f76d6a2480942ce2066b082c2592c7515",
+      "static_validation": {
+        "seed_rows": 4500,
+        "seed_positive_and_causal": true,
+        "seed_max_total_speed_c": 0.1831626457548631,
+        "reservoir_relative_gradient_residual": 2.530226290708981e-07,
+        "rotating_boundary_and_MPI_guard_present": true,
+        "simulation_launched": false,
+        "runtime_verified": false
+      }
+    },
+    "P_ROT_MS_8_B_SURF_1e15_RHO_IN_1e11": {
+      "file": "P_ROT_MS_8_B_SURF_1e15_RHO_IN_1e11.dat",
+      "parameters": {
+        "M_NS": 1.4,
+        "GAMMA": 1.1,
+        "RHO_IN": 100000000000.0,
+        "CS_REL_0": 0.136,
+        "V_INIT": 0.07,
+        "V_INF_INIT": 0.25,
+        "B_SURF": 1000000000000000.0,
+        "P_ROT_MS": 8.0
+      },
+      "sha256": "0aca1237232c7b723db85bf18df78e48211bfabbcb29e5793844a659efa280c8",
+      "static_validation": {
+        "seed_rows": 4500,
+        "seed_positive_and_causal": true,
+        "seed_max_total_speed_c": 0.1831626457548631,
+        "reservoir_relative_gradient_residual": 2.529901039771687e-07,
+        "rotating_boundary_and_MPI_guard_present": true,
+        "simulation_launched": false,
+        "runtime_verified": false
+      }
+    },
+    "P_ROT_MS_8_B_SURF_3e15_RHO_IN_1e10": {
+      "file": "P_ROT_MS_8_B_SURF_3e15_RHO_IN_1e10.dat",
+      "parameters": {
+        "M_NS": 1.4,
+        "GAMMA": 1.1,
+        "RHO_IN": 10000000000.0,
+        "CS_REL_0": 0.136,
+        "V_INIT": 0.07,
+        "V_INF_INIT": 0.25,
+        "B_SURF": 3000000000000000.0,
+        "P_ROT_MS": 8.0
+      },
+      "sha256": "8fedbd859794c04f2d47476c88da0d642d7f39f8c144ed216e7edafeccac40b1",
+      "static_validation": {
+        "seed_rows": 4500,
+        "seed_positive_and_causal": true,
+        "seed_max_total_speed_c": 0.1831626457548631,
+        "reservoir_relative_gradient_residual": 2.5331250896876156e-07,
+        "rotating_boundary_and_MPI_guard_present": true,
+        "simulation_launched": false,
+        "runtime_verified": false
+      }
+    },
+    "P_ROT_MS_4_B_SURF_1e15_RHO_IN_1e11": {
+      "file": "P_ROT_MS_4_B_SURF_1e15_RHO_IN_1e11.dat",
+      "parameters": {
+        "M_NS": 1.4,
+        "GAMMA": 1.1,
+        "RHO_IN": 100000000000.0,
+        "CS_REL_0": 0.136,
+        "V_INIT": 0.07,
+        "V_INF_INIT": 0.25,
+        "B_SURF": 1000000000000000.0,
+        "P_ROT_MS": 4.0
+      },
+      "sha256": "31b732526fbeb5ddbc492252e1436638576e9738db2802734784f27fa9d66e6b",
+      "static_validation": {
+        "seed_rows": 4500,
+        "seed_positive_and_causal": true,
+        "seed_max_total_speed_c": 0.18316265538721432,
+        "reservoir_relative_gradient_residual": 2.517400214951948e-07,
+        "rotating_boundary_and_MPI_guard_present": true,
+        "simulation_launched": false,
+        "runtime_verified": false
+      }
+    },
+    "P_ROT_MS_4_B_SURF_3e15_RHO_IN_1e11": {
+      "file": "P_ROT_MS_4_B_SURF_3e15_RHO_IN_1e11.dat",
+      "parameters": {
+        "M_NS": 1.4,
+        "GAMMA": 1.1,
+        "RHO_IN": 100000000000.0,
+        "CS_REL_0": 0.136,
+        "V_INIT": 0.07,
+        "V_INF_INIT": 0.25,
+        "B_SURF": 3000000000000000.0,
+        "P_ROT_MS": 4.0
+      },
+      "sha256": "d47133e449620e1c8e28a0f6fc000c50c41f886c629743f420fbc3801efc7f96",
+      "static_validation": {
+        "seed_rows": 4500,
+        "seed_positive_and_causal": true,
+        "seed_max_total_speed_c": 0.18316265538721432,
+        "reservoir_relative_gradient_residual": 2.517730175455313e-07,
+        "rotating_boundary_and_MPI_guard_present": true,
+        "simulation_launched": false,
+        "runtime_verified": false
+      }
+    },
+    "P_ROT_MS_4_B_SURF_3e15_RHO_IN_1e10": {
+      "file": "P_ROT_MS_4_B_SURF_3e15_RHO_IN_1e10.dat",
+      "parameters": {
+        "M_NS": 1.4,
+        "GAMMA": 1.1,
+        "RHO_IN": 10000000000.0,
+        "CS_REL_0": 0.136,
+        "V_INIT": 0.07,
+        "V_INF_INIT": 0.25,
+        "B_SURF": 3000000000000000.0,
+        "P_ROT_MS": 4.0
+      },
+      "sha256": "c5109ff26a77de40cbc7acbb370e2f2182f1992ac123d2c7af3d8d9785960ea1",
+      "static_validation": {
+        "seed_rows": 4500,
+        "seed_positive_and_causal": true,
+        "seed_max_total_speed_c": 0.18316265538721432,
+        "reservoir_relative_gradient_residual": 2.5208200193915786e-07,
+        "rotating_boundary_and_MPI_guard_present": true,
+        "simulation_launched": false,
+        "runtime_verified": false
+      }
+    },
+    "P_ROT_MS_16_B_SURF_1e15_RHO_IN_1e11": {
+      "file": "P_ROT_MS_16_B_SURF_1e15_RHO_IN_1e11.dat",
+      "parameters": {
+        "M_NS": 1.4,
+        "GAMMA": 1.1,
+        "RHO_IN": 100000000000.0,
+        "CS_REL_0": 0.136,
+        "V_INIT": 0.07,
+        "V_INF_INIT": 0.25,
+        "B_SURF": 1000000000000000.0,
+        "P_ROT_MS": 16.0
+      },
+      "sha256": "6b58c6cd5f119ed0b4a5ecbc9217935d2bed03749b8cf821e65d2fb422fa8d4a",
+      "static_validation": {
+        "seed_rows": 4500,
+        "seed_positive_and_causal": true,
+        "seed_max_total_speed_c": 0.1831626433467752,
+        "reservoir_relative_gradient_residual": 2.533040381891283e-07,
+        "rotating_boundary_and_MPI_guard_present": true,
+        "simulation_launched": false,
+        "runtime_verified": false
+      }
+    },
+    "P_ROT_MS_16_B_SURF_3e15_RHO_IN_1e11": {
+      "file": "P_ROT_MS_16_B_SURF_3e15_RHO_IN_1e11.dat",
+      "parameters": {
+        "M_NS": 1.4,
+        "GAMMA": 1.1,
+        "RHO_IN": 100000000000.0,
+        "CS_REL_0": 0.136,
+        "V_INIT": 0.07,
+        "V_INF_INIT": 0.25,
+        "B_SURF": 3000000000000000.0,
+        "P_ROT_MS": 16.0
+      },
+      "sha256": "5b4b866506c9a45b15c1c9ac8bcd55adea2e59f74aceefd128b1f76ea6fc43b6",
+      "static_validation": {
+        "seed_rows": 4500,
+        "seed_positive_and_causal": true,
+        "seed_max_total_speed_c": 0.1831626433467752,
+        "reservoir_relative_gradient_residual": 2.533347998046054e-07,
+        "rotating_boundary_and_MPI_guard_present": true,
+        "simulation_launched": false,
+        "runtime_verified": false
+      }
+    },
+    "P_ROT_MS_16_B_SURF_3e15_RHO_IN_1e10": {
+      "file": "P_ROT_MS_16_B_SURF_3e15_RHO_IN_1e10.dat",
+      "parameters": {
+        "M_NS": 1.4,
+        "GAMMA": 1.1,
+        "RHO_IN": 10000000000.0,
+        "CS_REL_0": 0.136,
+        "V_INIT": 0.07,
+        "V_INF_INIT": 0.25,
+        "B_SURF": 3000000000000000.0,
+        "P_ROT_MS": 16.0
+      },
+      "sha256": "f794bbc22e9fb7fe5b4d256ed2619ef68d5ab6c62c15885c182be8c91cdf20cb",
+      "static_validation": {
+        "seed_rows": 4500,
+        "seed_positive_and_causal": true,
+        "seed_max_total_speed_c": 0.1831626433467752,
+        "reservoir_relative_gradient_residual": 2.53621775581081e-07,
+        "rotating_boundary_and_MPI_guard_present": true,
+        "simulation_launched": false,
+        "runtime_verified": false
+      }
+    }
+  },
+  "baseline_seed_sha256": "101bd0c12d4858f3bd3b7dd44d628a5f76d6a2480942ce2066b082c2592c7515",
+  "model_source_sha256": {
+    "init.c": "be579a7be5afbef0fc9b92bd62bf12c6653f3ecf896d0cea4dcff4fe935b5475",
+    "definitions.h": "d3d9676e158649475dc81bf0a211298b7ca553a142d8b295be40cd70787536d9"
+  }
+}

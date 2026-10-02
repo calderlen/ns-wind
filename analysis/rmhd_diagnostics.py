@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from wind_common import C_CGS, derive_profiles, zero_crossings
+from wind_common import C_CGS, G_CGS, M_SUN, derive_profiles, zero_crossings
 
 
 SURFACE_RADIUS_KM = 12.0
@@ -19,8 +19,9 @@ def derive_rmhd_profiles(
     """Convert RMHD primitives to cgs profiles and derived fluxes.
 
     ``total_power_erg_s`` is the fluid-plus-electromagnetic energy flux
-    with rest-mass energy subtracted. It includes fluid enthalpy but no
-    gravitational-potential term; it is not a conserved gravity-inclusive budget.
+    with rest-mass energy subtracted and the Newtonian potential flux
+    ``-mdot G M/r`` included. This comparison convention is not an exact
+    conserved integral of PLUTO's configured relativistic gravity source.
     ``kinetic_plus_poynting_erg_s`` retains the old partial power diagnostic.
     ``bernoulli_c2`` includes fluid enthalpy and the radial Poynting flux
     per unit rest-mass flux, retaining the Newtonian potential convention.
@@ -125,7 +126,13 @@ def derive_rmhd_profiles(
         * fluid["pressure"] / (fluid["density"] * C_CGS**2)
     )
     thermal_enthalpy_power = mass_energy_flux * gamma * thermal_enthalpy_c2
-    total_power = fluid["edot_kin_erg_s"] + thermal_enthalpy_power + poynting_power
+    gravitational_power = mass_flux * (
+        -G_CGS * parameters["M_NS"] * M_SUN / radius_cm
+    )
+    total_power = (
+        fluid["edot_kin_erg_s"] + thermal_enthalpy_power + poynting_power
+        + gravitational_power
+    )
     electromagnetic_bernoulli_c2 = np.divide(
         poynting_power,
         mass_energy_flux,
@@ -159,6 +166,7 @@ def derive_rmhd_profiles(
         "mdot_g_s": fluid["mdot_g_s"],
         "kinetic_power_erg_s": fluid["edot_kin_erg_s"],
         "thermal_enthalpy_power_erg_s": thermal_enthalpy_power,
+        "gravitational_power_erg_s": gravitational_power,
         "poynting_power_erg_s": poynting_power,
         "kinetic_plus_poynting_erg_s": fluid["edot_kin_erg_s"] + poynting_power,
         "total_power_erg_s": total_power,

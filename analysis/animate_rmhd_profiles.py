@@ -15,7 +15,7 @@ from matplotlib.lines import Line2D
 import numpy as np
 
 from wind_common import (
-    REPO_DIR, first_outward_zero_crossing, read_definitions, read_catalog,
+    C_CGS, REPO_DIR, first_outward_zero_crossing, read_definitions, read_catalog,
     read_grid, read_parameters, read_snapshot,
 )
 from rmhd_diagnostics import derive_rmhd_profiles
@@ -28,12 +28,14 @@ from plot_helpers import (
 DEFAULT_RUN_DIR = REPO_DIR / "problems" / "rmhd_mpi"
 DEFAULT_OUTPUT_NAME = "wind_evolution_rmhd.gif"
 SURFACE_RADIUS_KM = 12.0
+M_SUN_G = 1.9885e33
+KELVIN_PER_MEV = 1.16045e10
 COMPONENT_COLORS = {
-    "velocity_c": "#0072b2",
-    "velocity_phi_c": "#009e73",
-    "sound_speed_c": "#d97706",
-    "alfven_speed_c": "#7c3aed",
-    "escape_velocity_c": "#c62828",
+    "velocity_cm_s": "#0072b2",
+    "velocity_phi_cm_s": "#009e73",
+    "sound_speed_cm_s": "#d97706",
+    "alfven_speed_cm_s": "#7c3aed",
+    "escape_velocity_cm_s": "#c62828",
     "field_r_gauss": "#0072b2",
     "field_phi_gauss": "#7c3aed",
     "fluid_bernoulli_c2": "#0072b2",
@@ -42,6 +44,7 @@ COMPONENT_COLORS = {
     "kinetic_power_erg_s": "#0072b2",
     "thermal_enthalpy_power_erg_s": "#d97706",
     "poynting_power_erg_s": "#7c3aed",
+    "gravitational_power_erg_s": "#c62828",
     "total_power_erg_s": "#009e73",
     "angular_momentum_fluid_erg": "#0072b2",
     "angular_momentum_electromagnetic_erg": "#7c3aed",
@@ -132,15 +135,23 @@ def animate_rmhd_profiles(
         snapshot_numbers.append(all_numbers[-1])
 
     profiles: list[dict[str, np.ndarray]] = []
-    times_ms: list[float] = []
+    times_s: list[float] = []
     time_unit = units["UNIT_LENGTH"] / units["UNIT_VELOCITY"]
     for number in snapshot_numbers:
         snapshot = read_snapshot(run_dir, number, radius_km, catalog)
-        profiles.append(derive_rmhd_profiles(snapshot, radius_km, units, parameters))
-        times_ms.append(float(snapshot["time"]) * time_unit * 1.0e3)
+        profile = derive_rmhd_profiles(snapshot, radius_km, units, parameters)
+        # Display conversions only; the numerical diagnostics retain their units.
+        profile["mdot_msun_s"] = profile["mdot_g_s"] / M_SUN_G
+        profile["temperature_mev"] = profile["temperature"] / KELVIN_PER_MEV
+        for component in (
+            "velocity", "velocity_phi", "sound_speed", "alfven_speed", "escape_velocity",
+        ):
+            profile[f"{component}_cm_s"] = profile[f"{component}_c"] * C_CGS
+        profiles.append(profile)
+        times_s.append(float(snapshot["time"]) * time_unit)
 
     initial = profiles[0]
-    times = np.asarray(times_ms)
+    times = np.asarray(times_s)
     active = radius_km > SURFACE_RADIUS_KM
     if not np.any(active):
         raise ValueError("The radial grid has no active cells outside 12 km")
@@ -148,7 +159,7 @@ def animate_rmhd_profiles(
 
     density_all = [profile["density"] for profile in profiles]
     pressure_all = [profile["pressure"] for profile in profiles]
-    temperature_all = [profile["temperature"] for profile in profiles]
+    temperature_all = [profile["temperature_mev"] for profile in profiles]
     gamma_all = [profile["lorentz_gamma"] for profile in profiles]
     plasma_beta_all = [profile["plasma_beta"] for profile in profiles]
     specific_angular_momentum_keys = (
@@ -159,10 +170,10 @@ def animate_rmhd_profiles(
     specific_angular_momentum_all = [
         profile[key] for profile in profiles for key in specific_angular_momentum_keys
     ]
-    velocity_all = [profile["velocity_c"] for profile in profiles]
-    velocity_phi_all = [profile["velocity_phi_c"] for profile in profiles]
-    sound_all = [profile["sound_speed_c"] for profile in profiles]
-    alfven_all = [profile["alfven_speed_c"] for profile in profiles]
+    velocity_all = [profile["velocity_cm_s"] for profile in profiles]
+    velocity_phi_all = [profile["velocity_phi_cm_s"] for profile in profiles]
+    sound_all = [profile["sound_speed_cm_s"] for profile in profiles]
+    alfven_all = [profile["alfven_speed_cm_s"] for profile in profiles]
     field_all = [
         profile[key]
         for profile in profiles
@@ -175,13 +186,13 @@ def animate_rmhd_profiles(
             "fluid_bernoulli_c2", "electromagnetic_bernoulli_c2", "bernoulli_c2",
         )
     ]
-    mdot_all = [profile["mdot_g_s"] for profile in profiles]
+    mdot_all = [profile["mdot_msun_s"] for profile in profiles]
     power_all = [
         profile[key]
         for profile in profiles
         for key in (
             "kinetic_power_erg_s", "thermal_enthalpy_power_erg_s",
-            "poynting_power_erg_s", "total_power_erg_s",
+            "poynting_power_erg_s", "gravitational_power_erg_s", "total_power_erg_s",
         )
     ]
     magnetization_all = [profile["magnetization"] for profile in profiles]
@@ -196,14 +207,14 @@ def animate_rmhd_profiles(
     ]
 
     surface_vr = np.asarray(
-        [profile["velocity_c"][surface_index] for profile in profiles]
+        [profile["velocity_cm_s"][surface_index] for profile in profiles]
     )
-    outer_vr = np.asarray([profile["velocity_c"][-1] for profile in profiles])
+    outer_vr = np.asarray([profile["velocity_cm_s"][-1] for profile in profiles])
     surface_vphi = np.asarray(
-        [profile["velocity_phi_c"][surface_index] for profile in profiles]
+        [profile["velocity_phi_cm_s"][surface_index] for profile in profiles]
     )
     outer_vphi = np.asarray(
-        [profile["velocity_phi_c"][-1] for profile in profiles]
+        [profile["velocity_phi_cm_s"][-1] for profile in profiles]
     )
     surface_bratio = np.asarray(
         [profile["field_phi_over_r"][surface_index] for profile in profiles]
@@ -217,7 +228,7 @@ def animate_rmhd_profiles(
     outer_sigma = np.asarray(
         [profile["magnetization"][-1] for profile in profiles]
     )
-    mdot_diagnostics = sample_histories(profiles, radius_km, "mdot_g_s")
+    mdot_diagnostics = sample_histories(profiles, radius_km, "mdot_msun_s")
     power_diagnostics = sample_histories(profiles, radius_km, "total_power_erg_s")
     angular_momentum_diagnostics = sample_histories(
         profiles, radius_km, "angular_momentum_total_erg"
@@ -301,12 +312,12 @@ def animate_rmhd_profiles(
     plot_pair(axes[1, 0], "pressure")
     axes[1, 0].set_yscale("log")
     axes[1, 0].set_ylim(*padded_log_limits(pressure_all))
-    axes[1, 0].set_ylabel(r"$P\;[\mathrm{erg\,cm^{-3}}]$")
+    axes[1, 0].set_ylabel(r"$P\;[\mathrm{dyn\,cm^{-2}}]$")
 
-    plot_pair(axes[2, 0], "temperature")
+    plot_pair(axes[2, 0], "temperature_mev")
     axes[2, 0].set_yscale("log")
     axes[2, 0].set_ylim(*padded_log_limits(temperature_all))
-    axes[2, 0].set_ylabel(r"$T\;[\mathrm{K}]$")
+    axes[2, 0].set_ylabel(r"$k_B T\;[\mathrm{MeV}]$")
 
     field_low, field_high, field_linthresh = signed_log_limits(field_all)
     plot_components(axes[3, 0], (
@@ -334,14 +345,14 @@ def animate_rmhd_profiles(
 
     speed_axis = axes[0, 1]
     plot_components(speed_axis, (
-        ("velocity_c", "-", 1.85),
-        ("velocity_phi_c", "--", 1.45),
-        ("sound_speed_c", ":", 1.45),
-        ("alfven_speed_c", (0, (3, 1, 1, 1)), 1.45),
+        ("velocity_cm_s", "-", 1.85),
+        ("velocity_phi_cm_s", "--", 1.45),
+        ("sound_speed_cm_s", ":", 1.45),
+        ("alfven_speed_cm_s", (0, (3, 1, 1, 1)), 1.45),
     ))
     escape_line, = speed_axis.plot(
-        radius_km, initial["escape_velocity_c"],
-        color=COMPONENT_COLORS["escape_velocity_c"], lw=1.3, ls="-.", alpha=0.85,
+        radius_km, initial["escape_velocity_cm_s"],
+        color=COMPONENT_COLORS["escape_velocity_cm_s"], lw=1.3, ls="-.", alpha=0.85,
     )
     speed_axis.axhline(0.0, color="black", lw=0.8)
     sonic_line, = speed_axis.plot(
@@ -357,17 +368,17 @@ def animate_rmhd_profiles(
             + velocity_phi_all
             + sound_all
             + alfven_all
-            + [initial["escape_velocity_c"]],
+            + [initial["escape_velocity_cm_s"]],
             include_zero=True,
         )
     )
-    speed_axis.set_ylabel(r"$v\;[c]$")
+    speed_axis.set_ylabel(r"$v\;[\mathrm{cm\,s^{-1}}]$")
     speed_legend_axis.legend(
         handles=[
-            radial_lines["velocity_c"],
-            radial_lines["velocity_phi_c"],
-            radial_lines["sound_speed_c"],
-            radial_lines["alfven_speed_c"],
+            radial_lines["velocity_cm_s"],
+            radial_lines["velocity_phi_cm_s"],
+            radial_lines["sound_speed_cm_s"],
+            radial_lines["alfven_speed_cm_s"],
             escape_line,
         ],
         labels=[r"$v_r$", r"$v_\phi$", r"$c_s$", r"$v_A$", r"$v_{\rm esc}$"],
@@ -411,11 +422,11 @@ def animate_rmhd_profiles(
     )
 
     mdot_low, mdot_high, mdot_linthresh = signed_log_limits(mdot_all)
-    plot_pair(axes[2, 1], "mdot_g_s")
+    plot_pair(axes[2, 1], "mdot_msun_s")
     axes[2, 1].axhline(0.0, color="black", lw=0.8)
     axes[2, 1].set_yscale("symlog", linthresh=mdot_linthresh)
     axes[2, 1].set_ylim(mdot_low, mdot_high)
-    axes[2, 1].set_ylabel(r"$\dot{M}\;[\mathrm{g\,s^{-1}}]$")
+    axes[2, 1].set_ylabel(r"$\dot{M}\;[M_\odot\,\mathrm{s^{-1}}]$")
 
     power_low, power_high, power_linthresh = signed_log_limits(power_all)
     power_axis = axes[3, 1]
@@ -423,6 +434,7 @@ def animate_rmhd_profiles(
         ("kinetic_power_erg_s", "--", 1.45),
         ("thermal_enthalpy_power_erg_s", "-.", 1.45),
         ("poynting_power_erg_s", ":", 1.55),
+        ("gravitational_power_erg_s", "-.", 1.45),
         ("total_power_erg_s", "-", 2.05),
     ))
     power_axis.axhline(0.0, color="black", lw=0.8)
@@ -434,9 +446,10 @@ def animate_rmhd_profiles(
             radial_lines["kinetic_power_erg_s"],
             radial_lines["thermal_enthalpy_power_erg_s"],
             radial_lines["poynting_power_erg_s"],
+            radial_lines["gravitational_power_erg_s"],
             radial_lines["total_power_erg_s"],
         ],
-        labels=["kinetic", "thermal/enthalpy", "EM", "total"],
+        labels=["kinetic", "thermal/enthalpy", "EM", "gravity", "total"],
         loc="lower right", fontsize=8, ncol=2, framealpha=0.95,
     )
 
@@ -484,7 +497,7 @@ def animate_rmhd_profiles(
             [surface_vr, outer_vr, surface_vphi, outer_vphi], include_zero=True
         )
     )
-    velocity_history_axis.set_ylabel(r"$v(r,t)\;[c]$")
+    velocity_history_axis.set_ylabel(r"$v(r,t)\;[\mathrm{cm\,s^{-1}}]$")
     velocity_history_axis.legend(loc="best", fontsize=8, ncol=2)
 
     mdot_history_axis = axes[1, 2]
@@ -499,7 +512,7 @@ def animate_rmhd_profiles(
     mdot_history_axis.axhline(0.0, color="black", lw=0.8)
     mdot_history_axis.set_yscale("symlog", linthresh=history_linthresh)
     mdot_history_axis.set_ylim(history_low, history_high)
-    mdot_history_axis.set_ylabel(r"$\dot{M}(r,t)\;[\mathrm{g\,s^{-1}}]$")
+    mdot_history_axis.set_ylabel(r"$\dot{M}(r,t)\;[M_\odot\,\mathrm{s^{-1}}]$")
     mdot_history_axis.legend(loc="best", fontsize=8, ncol=2)
 
     magnetic_history_axis = axes[2, 2]
@@ -656,7 +669,7 @@ def animate_rmhd_profiles(
         axis.set_ylim(*ell_limits[:2])
         axis.set_ylabel(r"$\ell\;[\mathrm{cm^2\,s^{-1}}]$")
     specific_angular_momentum_history_axis.set_xlim(*_time_limits(times))
-    specific_angular_momentum_history_axis.set_xlabel(r"$t\;[\mathrm{ms}]$")
+    specific_angular_momentum_history_axis.set_xlabel(r"$t\;[\mathrm{s}]$")
     specific_angular_momentum_history_axis.legend(loc="best", fontsize=8, ncol=2)
 
     for row in range(5):
@@ -712,7 +725,7 @@ def animate_rmhd_profiles(
         rotation_text = rf",\quad P_{{\rm rot}}={parameters['P_ROT_MS']:g}\,\mathrm{{ms}}"
     parameter_title = (
         rf"$M_{{\rm NS}}={parameters['M_NS']:g}\,M_\odot"
-        rf",\quad c_{{s,0}}={parameters['CS_REL_0']:g}\,c"
+        rf",\quad c_{{s,0}}={scientific_latex(parameters['CS_REL_0'] * C_CGS)}\,\mathrm{{cm\,s^{{-1}}}}"
         rf",\quad \rho_0={scientific_latex(parameters['RHO_IN'])}"
         rf"\,\mathrm{{g\,cm^{{-3}}}}"
         rf",\quad B_0={scientific_latex(parameters['B_SURF'])}\,\mathrm{{G}}"
@@ -738,7 +751,7 @@ def animate_rmhd_profiles(
 
         sonic_radius = first_outward_zero_crossing(
             radius_km,
-            profile["velocity_c"] - profile["sound_speed_c"],
+            profile["velocity_cm_s"] - profile["sound_speed_cm_s"],
             active,
         )
         if sonic_radius is None:
@@ -747,7 +760,7 @@ def animate_rmhd_profiles(
             sonic_text.set_text(r"Sonic: no outward $v_r=c_s$ crossing")
         else:
             sonic_speed = float(
-                np.interp(sonic_radius, radius_km, profile["velocity_c"])
+                np.interp(sonic_radius, radius_km, profile["velocity_cm_s"])
             )
             sonic_line.set_data([sonic_radius, sonic_radius], [0.0, sonic_speed])
             sonic_marker.set_data([sonic_radius], [sonic_speed])
@@ -759,7 +772,7 @@ def animate_rmhd_profiles(
 
         alfven_radius = first_outward_zero_crossing(
             radius_km,
-            profile["velocity_c"] - profile["alfven_speed_c"],
+            profile["velocity_cm_s"] - profile["alfven_speed_cm_s"],
             active,
         )
         if alfven_radius is None:
@@ -769,7 +782,7 @@ def animate_rmhd_profiles(
             alfven_radius_text.set_visible(True)
         else:
             alfven_speed = float(
-                np.interp(alfven_radius, radius_km, profile["velocity_c"])
+                np.interp(alfven_radius, radius_km, profile["velocity_cm_s"])
             )
             alfven_radius_line.set_data([alfven_radius, alfven_radius], [0.0, alfven_speed])
             alfven_radius_marker.set_data([alfven_radius], [alfven_speed])
@@ -788,7 +801,7 @@ def animate_rmhd_profiles(
 
         title.set_text(
             f"{run_label}: {parameter_title}, "
-            rf"$t={times[frame_index]:.1f}\,\mathrm{{ms}}$"
+            rf"$t={times[frame_index]:.4f}\,\mathrm{{s}}$"
         )
 
     update(0)
@@ -836,7 +849,7 @@ def animate_rmhd_profiles(
         print(f"Saved {frame_path}")
         print(
             f"Latest completed snapshot: {snapshot_numbers[-1]} "
-            f"({times[-1]:.3f} ms)"
+            f"({times[-1]:.6f} s)"
         )
         return frame_path
 
